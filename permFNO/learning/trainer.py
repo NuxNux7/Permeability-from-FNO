@@ -2,16 +2,21 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
-
 from torch.cuda.amp import autocast, GradScaler
 
 import time
-
 from tabulate import tabulate
 
-from data.dataWriter import visualize, saveCSV
-from data.normalization import Entnormalizer
-from learning.loss import *
+'''import sys
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent.parent
+print(project_root)
+sys.path.append(str(project_root))'''
+
+from permFNO.data.dataWriter import visualize, saveCSV
+from permFNO.data.normalization import Entnormalizer
+from .loss import *
 
 
 class Trainer():

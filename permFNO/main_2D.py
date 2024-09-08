@@ -13,11 +13,10 @@ from data.dataWriter import saveArraysToVTK
 from data.normalization import Entnormalizer
 
 from models.fno import FNOArch
-from models.siren import SirenArch
-from models.experimental.ffno import FNOFactorizedMesh3D
+from models.layers.convFC import Conv2dFCLayer
 from models.feedForward import FeedForwardBlock
 
-from trainer import Trainer
+from learning.trainer import Trainer
 
 
 # Main execution
@@ -29,55 +28,54 @@ def main(load_checkpoint: bool = False,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Setup folder
-    folder = "output/" + name
+    folder = "../../output/" + name
     if not load_checkpoint:
         os.makedirs(folder, exist_ok=True)
 
     # Hyperparameters
-    batch_size = 6
+    batch_size = 20
     learning_rate = 2.5e-3
     epochs = 75
 
     # Create data loaders
-    name_dataset = "2D/2D"
+    name_dataset = "2D_rocks"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/" + name_dataset + ".h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_validation.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
                                     h5=True, masking=True)
-        #train_dataset = DictDataset('/home/vault/iwia/iwia057h/data/train',        #"/home/woody/iwia/iwia057h/" + name_dataset + "_train.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
-                                    #scaling=False, rotate=False, fast=False, h5=False, masking=True)
         print("Validation dataset loaded successfuly!")
-        #train_dataset = test_dataset
+        train_dataset = test_dataset
         analyse_dataset(test_dataset)
 
-        #inputs, targets, mask, _ = test_dataset[2]
-        #saveArraysToVTK(inputs[0], targets[0], targets[0], mask[0], "test2.vti")
+        #inputs, targets, mask, name = train_dataset[0]
+        #print(name)
+        #saveArraysToVTK(inputs[0], targets[0], targets[0], mask[0], "test.vti")
         return
     else:
-        train_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_train.h5",
+        train_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_train.h5",
                                     h5=True, masking=True)
         print("Training dataset loaded successfuly!")
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_test.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_test.h5",
                                     h5=True, masking=True)
         print("Testing dataset loaded successfuly!")
     
     bounds = train_dataset.getBounds()
-    entnormalizer = Entnormalizer(0, 1, bounds[2], 0, 1)
+    entnormalizer = Entnormalizer(0, 1, bounds[2], bounds[3], bounds[4])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4)
     
     
     # Initialize the model
 
-    #decoderNet = FeedForwardBlock(dims=3, fno_layer_size=32, num_blocks=2,
-                                  #factor=4, activation_fn=None,
-                                  #use_weight_norm=True)
-    decoderNet = SirenArch(in_features=32, out_features=1, layer_size=(4*32), nr_layers=2, weight_norm=True)
+    decoderNet = FeedForwardBlock(dims=2, fno_layer_size=32, num_blocks=2,
+                                  factor=4, activation_fn=None,
+                                  use_weight_norm=True)
+    #decoderNet = Conv2dFCLayer(in_features=32, out_features=1, use_weight_norm=True)
 
     model = FNOArch(
-        dimension=3,
+        dimension=2,
         nr_fno_layers=12,
         nr_ff_blocks=2,
-        fno_modes=[24, 16, 16],     #from [32,16,16]
+        fno_modes=[80, 64],     #from [32,16,16]
         padding=8,
         decoder_net=decoderNet,
         functional=True,
@@ -99,7 +97,7 @@ def main(load_checkpoint: bool = False,
     # Initialize the optimizer with Cosine LR
     gradient_accumulation = 1
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
-    scheduler = CosineWithWarmupScheduler(optimizer, 500, ((len(train_loader) // gradient_accumulation) * epochs), min_lambda=0.05)
+    scheduler = CosineWithWarmupScheduler(optimizer, 250, ((len(train_loader) // gradient_accumulation) * epochs), min_lambda=0.05)
 
     # Load checkpoint
     epoch = 0
@@ -140,4 +138,4 @@ if __name__ == "__main__":
     torch.backends.cudnn.allow_tf32 = True
 
     evaluation = True
-    main(load_checkpoint=(False or evaluation), name="external_12l_5_" , evaluation=evaluation)
+    main(load_checkpoint=(False or evaluation), name="8l_2D_rocks" , evaluation=evaluation)

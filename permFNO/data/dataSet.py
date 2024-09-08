@@ -12,9 +12,9 @@ import random
 import math
 import csv
 
-from .dataReader import load_dataset, load_dataset_fast, create_mask
-from .dataWriter import saveH5PY
-from .normalization import entnormalize_new, normalize_new
+from permFNO.data.dataReader import load_dataset, load_dataset_fast, create_mask
+from permFNO.data.dataWriter import saveH5PY
+from permFNO.data.normalization import entnormalize_new, normalize_new
 
 
 class DictDataset(Dataset):
@@ -328,7 +328,7 @@ if __name__ == "__main__":
 
     #filter_dataset(path, 95, 1.11)
 
-    split_full_dataset(path, 0.9, random_split=False)
+    '''split_full_dataset(path, 0.9, random_split=False)
 
     path = basefile + '_train.h5'
     split_full_dataset(path, (8/9), random_split=False)
@@ -339,4 +339,4 @@ if __name__ == "__main__":
 
     old = basefile + '_train_test.h5'
     new = basefile + '_validation.h5'
-    os.rename(old, new)
+    os.rename(old, new)'''

@@ -1,12 +1,16 @@
 import torch
 import torch.nn as nn
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
+
+from torch.cuda.amp import autocast, GradScaler
 
 import time
 
 from tabulate import tabulate
 
 from data.dataWriter import visualize, saveCSV
+from data.normalization import Entnormalizer
 from learning.loss import *
 
 
@@ -16,16 +20,34 @@ class Trainer():
                  train_loader, test_loader,
                  optimizer, scheduler, criterion,
                  epochs,
-                 folder, device):
+                 folder, device,
+                 amp: bool = False, 
+                 gradient_accumulation: int = 4,
+                 entnorm=Entnormalizer()):
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.optimizer = optimizer
         self.scheduler = scheduler
-        self.criterion = criterion
+        if not isinstance(criterion, list):
+            self.criterion = [(1., criterion)]
+        else:
+            self.criterion = criterion
         self.epochs = epochs
         self.folder = folder
         self.device = device
+        self.entnorm = entnorm
+
+        self.amp = amp
+        self.gradient_accumulation = gradient_accumulation
+
+        self.scaler = GradScaler(    
+            init_scale=65536.0,
+            growth_factor=2.0,
+            backoff_factor=0.5,
+            growth_interval=2000,
+            enabled=self.amp
+        )
 
         self.writer = SummaryWriter(log_dir=folder)
 
@@ -45,7 +67,7 @@ class Trainer():
                           epoch_duration)
 
             # Save network
-            if (((epoch + 1) % 10) == 0) or (epoch == (self.epochs - 1)):
+            if (((epoch + 1) % 5) == 0) or (epoch == (self.epochs - 1)):
                 torch.save({
                 'epoch': epoch,
                 'model_state_dict': self.model.state_dict(),
@@ -68,22 +90,48 @@ class Trainer():
         self.model.train()
 
         total_loss = 0
+        self.optimizer.zero_grad()
         for batch_idx, (inputs, targets, mask, _) in enumerate(self.train_loader):
 
+            # load inputs
             inputs, targets, mask = inputs.to(self.device), targets.to(self.device), mask.to(self.device)
-            self.optimizer.zero_grad()
 
-            outputs = self.model(inputs)
+            with autocast(enabled=self.amp):
+                outputs = self.model(inputs)
 
-            # Calculate loss
-            loss = self.criterion(outputs, targets, mask)
+                # loss of preassure filed with set criterion
+                outputs_entnorm = self.entnorm(outputs)
+                targets_entnorm = self.entnorm(targets)
+                
+                crit, factor = self.criterion[0]
+                loss = factor * crit(outputs, targets, mask)
 
-            loss.backward()
-            #nn.utils.clip_grad_value_(self.model.parameters(), clip_value=0.1)
+                # loss of preassure at inlet at non normalized datapoints
+                if len(self.criterion) > 1:
+                    crit, factor = self.criterion[1]
+
+                    output_mean = outputs_entnorm[:, 0, 2].mean(dim=(-2, -1))
+                    target_mean = targets_entnorm[:, 0, 2].mean(dim=(-2, -1))
+
+                    inlet_loss = factor * crit(output_mean, target_mean)
+
+                    loss += torch.clip(inlet_loss, 0, 1)
+
+                loss = loss / self.gradient_accumulation
+
+            self.scaler.scale(loss).backward()
 
             # Change weights
-            self.optimizer.step()
-            self.scheduler.step()
+            if ((batch_idx + 1) % self.gradient_accumulation == 0) or (batch_idx + 1 == len(self.train_loader)):
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
+                self.scaler.step(self.optimizer)
+                self.optimizer.zero_grad()
+
+                # update progression
+                self.scaler.update()
+
+                self.scheduler.step()
 
             total_loss += loss
 
@@ -92,12 +140,14 @@ class Trainer():
 
 
     # Evaluation function
-    def evaluate(self, verbose):
+    def evaluate(self, verbose: bool = True):
         self.model.eval()
+
+        mean_loss_function = MAELoss
 
         if verbose:
             individual_criterium = MaskedIndividualLoss(MaskedMAELoss())
-            individual_criterium_mean = IndividualLoss(MARELoss())
+            individual_criterium_mean = IndividualLoss(mean_loss_function())
             individual_error = {}
             individual_error_mean = {}
 
@@ -108,25 +158,35 @@ class Trainer():
             for batch, (inputs, targets, masks, names) in enumerate(self.test_loader):
                 inputs, targets, masks  = inputs.to(self.device), targets.to(self.device), masks.to(self.device)
 
-                outputs = self.model(inputs)
-                total_loss += self.criterion(outputs, targets, masks).item()
-                #calculate inlet loss
-                output_mean = outputs[:, 0, 1].mean(dim=(-2, -1))
-                target_mean = targets[:, 0, 1].mean(dim=(-2, -1))
-                mean_loss = MARELoss()(output_mean, target_mean)
-                total_mean_loss += mean_loss.item()
-                if verbose:
-                    result = individual_criterium(outputs, targets, masks, names)
-                    individual_error.update(result)
-                    print(outputs.shape)
-                    result = individual_criterium_mean(output_mean, target_mean, names)
-                    individual_error_mean.update(result)
-                if batch == 0:
-                    input_sample = inputs[0][0].cpu().numpy()
-                    output_sample = outputs[0][0].cpu().numpy()
-                    target_sample = targets[0][0].cpu().numpy()
-                    mask_sample = masks[0][0].cpu().numpy()
-                    self.writer.add_graph(self.model, torch.unsqueeze(inputs[0, :, :, :, :], 0))
+                with autocast(enabled=self.amp):
+                    outputs = self.model(inputs)
+
+                    # reverse power normalization
+                    outputs = self.entnorm(outputs)
+                    targets = self.entnorm(targets) #0., 1., 0.3, 0., 0.9215659
+
+                    total_loss += self.criterion[0][0](outputs, targets, masks).item()
+
+                    #calculate inlet loss
+                    if len(outputs.shape) == 5:
+                        output_mean = outputs[:, 0, 2].mean(dim=(-2, -1))
+                        target_mean = targets[:, 0, 2].mean(dim=(-2, -1))
+                    else:
+                        output_mean = outputs[:, 0, 2].mean(dim=(-1))
+                        target_mean = targets[:, 0, 2].mean(dim=(-1))
+                    mean_loss = R2Score()(output_mean, target_mean)
+                    total_mean_loss += mean_loss.item()
+                    if verbose:
+                        result = individual_criterium(outputs, targets, masks, names)
+                        individual_error.update(result)
+                        result = individual_criterium_mean(output_mean, target_mean, names)
+                        individual_error_mean.update(result)
+                    if batch == 0:
+                        input_sample = inputs[0][0].cpu().numpy()
+                        output_sample = outputs[0][0].cpu().numpy()
+                        target_sample = targets[0][0].cpu().numpy()
+                        mask_sample = masks[0][0].cpu().numpy()
+                        self.writer.add_graph(self.model, torch.unsqueeze(inputs[0], 0))
 
             # print result
             if verbose:

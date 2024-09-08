@@ -16,7 +16,7 @@ from models.fno import FNOArch
 from models.layers.convFC import Conv2dFCLayer
 from models.feedForward import FeedForwardBlock
 
-from trainer_amp import Trainer
+from trainer import Trainer
 
 
 # Main execution

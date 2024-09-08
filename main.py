@@ -17,7 +17,7 @@ from models.siren import SirenArch
 from models.experimental.ffno import FNOFactorizedMesh3D
 from models.feedForward import FeedForwardBlock
 
-from trainer_amp import Trainer
+from trainer import Trainer
 
 
 # Main execution

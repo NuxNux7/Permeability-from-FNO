@@ -28,28 +28,30 @@ def main(load_checkpoint: bool = False,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Setup folder
-    folder = "../../output/" + name
+    folder = os.getcwd() + "/output/" + name
+    cwd = os.getcwd()
+    print(cwd)
     if not load_checkpoint:
         os.makedirs(folder, exist_ok=True)
 
     # Hyperparameters
-    batch_size = 20
+    batch_size = 25
     learning_rate = 2.5e-3
     epochs = 75
 
     # Create data loaders
-    name_dataset = "2D_rocks"
+    name_dataset = "2D"
     if evaluation:
         test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_validation.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
                                     h5=True, masking=True)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
-        analyse_dataset(test_dataset)
+        #analyse_dataset(test_dataset)
 
         #inputs, targets, mask, name = train_dataset[0]
         #print(name)
         #saveArraysToVTK(inputs[0], targets[0], targets[0], mask[0], "test.vti")
-        return
+        #return
     else:
         train_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_train.h5",
                                     h5=True, masking=True)
@@ -73,11 +75,12 @@ def main(load_checkpoint: bool = False,
 
     model = FNOArch(
         dimension=2,
-        nr_fno_layers=12,
+        nr_fno_layers=8,
         nr_ff_blocks=2,
-        fno_modes=[80, 64],     #from [32,16,16]
+        fno_modes=[80, 64],
         padding=8,
         decoder_net=decoderNet,
+        coord_features=False,           # TESTING
         functional=True,
         weight_sharing=False,
         weight_norm=True,
@@ -102,7 +105,7 @@ def main(load_checkpoint: bool = False,
     # Load checkpoint
     epoch = 0
     if load_checkpoint:
-        checkpoint = torch.load("/home/hpc/iwia/iwia057h/os/ubuntu/home/FFNO/"+ folder + "/checkpoint.pth")
+        checkpoint = torch.load(folder + "/checkpoint.pth")
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler"])
@@ -138,4 +141,4 @@ if __name__ == "__main__":
     torch.backends.cudnn.allow_tf32 = True
 
     evaluation = True
-    main(load_checkpoint=(False or evaluation), name="8l_2D_rocks" , evaluation=evaluation)
+    main(load_checkpoint=(False or evaluation), name="8l_2D_nocoord" , evaluation=evaluation)

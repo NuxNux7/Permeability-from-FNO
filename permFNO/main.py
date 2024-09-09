@@ -14,7 +14,6 @@ from data.normalization import Entnormalizer
 
 from models.fno import FNOArch
 from models.siren import SirenArch
-from models.experimental.ffno import FNOFactorizedMesh3D
 from models.feedForward import FeedForwardBlock
 
 from learning.trainer import Trainer
@@ -29,7 +28,7 @@ def main(load_checkpoint: bool = False,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Setup folder
-    folder = "../../output/" + name
+    folder = os.getcwd() + "/output/" + name
     if not load_checkpoint:
         os.makedirs(folder, exist_ok=True)
 
@@ -39,9 +38,9 @@ def main(load_checkpoint: bool = False,
     epochs = 75
 
     # Create data loaders
-    name_dataset = "2D/2D"
+    name_dataset = "5Scaling"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/" + name_dataset + ".h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + ".h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
                                     h5=True, masking=True)
         #train_dataset = DictDataset('/home/vault/iwia/iwia057h/data/train',        #"/home/woody/iwia/iwia057h/" + name_dataset + "_train.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
                                     #scaling=False, rotate=False, fast=False, h5=False, masking=True)
@@ -75,11 +74,12 @@ def main(load_checkpoint: bool = False,
 
     model = FNOArch(
         dimension=3,
-        nr_fno_layers=12,
+        nr_fno_layers=8,
         nr_ff_blocks=2,
         fno_modes=[24, 16, 16],     #from [32,16,16]
         padding=8,
         decoder_net=decoderNet,
+        coord_features=False,
         functional=True,
         weight_sharing=False,
         weight_norm=True,
@@ -139,5 +139,5 @@ if __name__ == "__main__":
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    evaluation = True
-    main(load_checkpoint=(False or evaluation), name="external_12l_5_" , evaluation=evaluation)
+    evaluation = False
+    main(load_checkpoint=(False or evaluation), name="external_8l_5_nocoord" , evaluation=evaluation)

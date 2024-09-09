@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 
 import time
 from tabulate import tabulate
@@ -101,7 +101,7 @@ class Trainer():
             # load inputs
             inputs, targets, mask = inputs.to(self.device), targets.to(self.device), mask.to(self.device)
 
-            with autocast(enabled=self.amp):
+            with autocast("cuda", enabled=self.amp):
                 outputs = self.model(inputs)
 
                 # loss of preassure filed with set criterion
@@ -148,10 +148,10 @@ class Trainer():
     def evaluate(self, verbose: bool = True):
         self.model.eval()
 
-        mean_loss_function = MAELoss
+        mean_loss_function = MARELoss
 
         if verbose:
-            individual_criterium = MaskedIndividualLoss(MaskedMAELoss())
+            individual_criterium = MaskedIndividualLoss(MaskedMARELoss())
             individual_criterium_mean = IndividualLoss(mean_loss_function())
             individual_error = {}
             individual_error_mean = {}
@@ -163,7 +163,7 @@ class Trainer():
             for batch, (inputs, targets, masks, names) in enumerate(self.test_loader):
                 inputs, targets, masks  = inputs.to(self.device), targets.to(self.device), masks.to(self.device)
 
-                with autocast(enabled=self.amp):
+                with autocast("cuda", enabled=self.amp):
                     outputs = self.model(inputs)
 
                     # reverse power normalization
@@ -179,7 +179,7 @@ class Trainer():
                     else:
                         output_mean = outputs[:, 0, 2].mean(dim=(-1))
                         target_mean = targets[:, 0, 2].mean(dim=(-1))
-                    mean_loss = R2Score()(output_mean, target_mean)
+                    mean_loss = mean_loss_function()(output_mean, target_mean)
                     total_mean_loss += mean_loss.item()
                     if verbose:
                         result = individual_criterium(outputs, targets, masks, names)

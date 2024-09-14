@@ -47,7 +47,7 @@ def normalize_new(grid, pow, verbose=False):
 
 def entnormalize_new(grid, pow, min_val, max_val):
     grid = np.clip(grid, 0, None)
-    grid = np.pow(grid, (1/pow))
+    grid = np.power(grid, (1/pow))
 
     grid = (grid * (max_val - min_val)) + min_val
 

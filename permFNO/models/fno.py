@@ -14,7 +14,7 @@ from .siren import SirenArch
 from .feedForward import FeedForwardBlock
 
 #from ..layers.convFC import *
-from .layers.spectral import *
+from .layers.spectralLayers import *
 
 
 logger = logging.getLogger(__name__)

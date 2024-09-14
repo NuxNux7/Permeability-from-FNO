@@ -13,7 +13,7 @@ from data.dataWriter import saveArraysToVTK
 from data.normalization import Entnormalizer
 
 from models.fno import FNOArch
-from models.layers.convFC import Conv2dFCLayer
+from models.layers.convFCLayers import Conv2dFCLayer
 from models.feedForward import FeedForwardBlock
 
 from learning.trainer import Trainer
@@ -35,22 +35,24 @@ def main(load_checkpoint: bool = False,
         os.makedirs(folder, exist_ok=True)
 
     # Hyperparameters
-    batch_size = 25
+    batch_size = 30
     learning_rate = 2.5e-3
     epochs = 75
 
     # Create data loaders
-    name_dataset = "2D"
+    name_dataset = "2D_full_filtered_99"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_validation.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_test.h5",
                                     h5=True, masking=True)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
         #analyse_dataset(test_dataset)
 
+
         #inputs, targets, mask, name = train_dataset[0]
-        #print(name)
-        #saveArraysToVTK(inputs[0], targets[0], targets[0], mask[0], "test.vti")
+        #saveArraysToVTK(inputs[0], targets[0], targets[0], mask[0], "test.vtk")
+
+        #print(len(test_dataset))
         #return
     else:
         train_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_train.h5",
@@ -141,4 +143,4 @@ if __name__ == "__main__":
     torch.backends.cudnn.allow_tf32 = True
 
     evaluation = True
-    main(load_checkpoint=(False or evaluation), name="8l_2D_nocoord" , evaluation=evaluation)
+    main(load_checkpoint=(False or evaluation), name="8l_2D_fulll_nocoord" , evaluation=evaluation)

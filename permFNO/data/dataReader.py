@@ -34,7 +34,7 @@ from .normalization import *
 def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=False, masking=True, calc_p_in=False, dim=3):
     "Loads a FNO dataset"
 
-    size = len(os.listdir(path)) - 1
+    size = len(os.listdir(path))
     if rotate:
         size = 4 * size
 
@@ -45,8 +45,8 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
     if dim == 2:
         shape = (size, 1, 320, 256)
 
-    invar = {"fill": np.empty(shape, dtype=np.bool)}
-    outvar = {"p" : np.empty(shape)}#, dtype=np.float32)}
+    invar = {"fill": np.empty(shape, dtype=np.float32)}
+    outvar = {"p" : np.empty(shape, dtype=np.float32)}
 
     if calc_p_in:
         if dim == 3:
@@ -65,24 +65,26 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
             name = os.path.basename(file).split('_')
             sample = int(name[2])
         
-            if sample in range(1001, 1201, 1):
-                continue
+            #if sample in range(1001, 2670, 1):
+                #continue
+
+            #if counter >= size:
+                #continue
 
         if not file.endswith('.vti'):
             continue
 
         #calculate path
-        #geometry_file, density_key = get_geometry_path(file, dim)
-        print(file)
+        geometry_file, density_key = get_geometry_path(file, dim)
 
-        #dict_geometry = load_VTI(path_geometry + "/" + geometry_file, scaling, cells=True, swapZX=(dim==3), shape=shape[2:])
+        dict_geometry = load_VTI(path_geometry + "/" + geometry_file, scaling, cells=True, swapZX=(dim==3), shape=shape[2:])
         dict_simulation = load_VTI(path + "/" + file, scaling, cells=True, swapZX=(dim==3), shape=shape[2:])
         print("loaded file: ", (counter + 1), "/", size)
 
-        invar["fill"][counter] = dict_simulation["OverlapFraction"]
-        outvar["p"][counter] = dict_simulation["Density"]
-        #invar["fill"][counter] = dict_geometry['NoSlip']
-        #outvar["p"][counter] = dict_simulation[density_key]
+        #invar["fill"][counter] = dict_simulation["OverlapFraction"]
+        #outvar["p"][counter] = dict_simulation["Density"]
+        invar["fill"][counter] = dict_geometry['NoSlip']
+        outvar["p"][counter] = dict_simulation[density_key]
         
         counter = counter + 1
 
@@ -109,12 +111,13 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
 
     # get bounds for normalization
 
-    '''offset = 0
+    offset = 0
     scale = 1
     pow = 0.5
     outvar["p"], min_pow, max_pow = normalize_new(outvar["p"], pow)    # changed from external:12 old: 135 (125)
-    bounds = [offset, scale, pow, min_pow, max_pow]'''
-    bounds = [0, 1, 1, 0, 1]
+    invar["fill"], _, _ = normalize_new(invar["fill"], 1)
+    bounds = [offset, scale, pow, min_pow, max_pow]
+    #bounds = [0, 1, 1, 0, 1]
 
     # create p_in
     if calc_p_in:
@@ -179,7 +182,7 @@ def apped_to_dict(dict, invar, outvar):
 # GRID TRANSFORMATIONS
 def scale_grid(grid, shape):
     new_shape = (grid.shape[0], grid.shape[1], *shape)
-    new_grid = resize(grid, new_shape, anti_aliasing=False)
+    new_grid = resize(grid, new_shape, anti_aliasing=True, preserve_range=True)
 
     return new_grid
 
@@ -189,13 +192,15 @@ def scale_grid(grid, shape):
 # GRID CREATION
 def create_mask(fill, calc_p_in):
 
-    mask = {"p": 0.1 * np.ones((fill.shape))}
+    mask = {"p": np.empty(fill.shape, dtype=np.float32)}
 
     if calc_p_in:
         mask["p_in"] = np.ones((fill.shape[0], 1, 1, 1, 1))
     
     # emphesizing the inlet preassure
-    mask["p"][fill[:] <= 0] = 0.9 * np.ones((fill.shape))[fill[:] <= 0 ]
+    #mask["p"][fill[:] <= 0] = 0.9 * np.ones((fill.shape))[fill[:] <= 0 ]
+
+    mask["p"] = (1. - fill[:]) * 0.8 + 0.1
 
     for i in range(fill.shape[0]):
         mask["p"][i][0][1:4][:][:] = 1
@@ -346,16 +351,14 @@ if __name__ == "__main__":
     import h5py
     import numpy as np
 
-    rotate = False
+    rotate = True
 
     invar, outvar, _, names, bounds = load_dataset(
-        "/home/woody/iwia/iwia057h/2D/simulation",
-        "/home/woody/iwia/iwia057h/2D/geometry",
+        "/home/woody/iwia/iwia057h/external/ownSimulations/simulation",
+        "/home/woody/iwia/iwia057h/external/ownSimulations/geometry",
         rotate=rotate, scaling=True, masking=False, calc_p_in=False,
-        dim=2
+        dim=3
     )
-
-    print(bounds)
 
     new_names = []
 
@@ -370,7 +373,7 @@ if __name__ == "__main__":
     
     res = np.array(new_names)
 
-    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/2D/2D_wh_rocks.h5")
+    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/external/5Scaling_interpol.h5")
 
     '''for input, output, name in zip(invar.values(), outvar.values(), names):
         data_dict = {"fill":    input,

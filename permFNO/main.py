@@ -38,19 +38,18 @@ def main(load_checkpoint: bool = False,
     epochs = 75
 
     # Create data loaders
-    name_dataset = "5Scaling"
+    name_dataset = "5Scaling_Interpol"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + ".h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_test.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
                                     h5=True, masking=True)
-        #train_dataset = DictDataset('/home/vault/iwia/iwia057h/data/train',        #"/home/woody/iwia/iwia057h/" + name_dataset + "_train.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
-                                    #scaling=False, rotate=False, fast=False, h5=False, masking=True)
+        len(test_dataset)
         print("Validation dataset loaded successfuly!")
-        #train_dataset = test_dataset
+        train_dataset = test_dataset
         #analyse_dataset(test_dataset)
 
         #inputs, targets, mask, _ = test_dataset[2]
-        #saveArraysToVTK(inputs[0], targets[0], targets[0], mask[0], "test2.vti")
-        return
+        #saveArraysToVTK(inputs[0], mask[0], targets[0], mask[0], "test.vtk")
+        #return
     else:
         train_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_train.h5",
                                     h5=True, masking=True)
@@ -76,10 +75,10 @@ def main(load_checkpoint: bool = False,
         dimension=3,
         nr_fno_layers=8,
         nr_ff_blocks=2,
-        fno_modes=[24, 16, 16],     #from [32,16,16]
+        fno_modes=[24, 16, 16],
         padding=8,
         decoder_net=decoderNet,
-        coord_features=False,
+        coord_features=True,
         functional=True,
         weight_sharing=False,
         weight_norm=True,
@@ -104,7 +103,7 @@ def main(load_checkpoint: bool = False,
     # Load checkpoint
     epoch = 0
     if load_checkpoint:
-        checkpoint = torch.load("/home/hpc/iwia/iwia057h/os/ubuntu/home/FFNO/"+ folder + "/checkpoint.pth")
+        checkpoint = torch.load(folder + "/checkpoint.pth")
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler"])
@@ -139,5 +138,5 @@ if __name__ == "__main__":
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    evaluation = False
-    main(load_checkpoint=(False or evaluation), name="external_8l_5_nocoord" , evaluation=evaluation)
+    evaluation = True
+    main(load_checkpoint=(True or evaluation), name="external_8l_5_interpol_huber" , evaluation=evaluation)

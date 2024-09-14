@@ -151,8 +151,8 @@ class Trainer():
         mean_loss_function = MARELoss
 
         if verbose:
-            individual_criterium = MaskedIndividualLoss(MaskedMARELoss())
-            individual_criterium_mean = IndividualLoss(mean_loss_function())
+            individual_criterium = MaskedIndividualLoss(MaskedMAELoss())
+            individual_criterium_mean = IndividualLoss(MAELoss())
             individual_error = {}
             individual_error_mean = {}
 
@@ -170,7 +170,7 @@ class Trainer():
                     outputs = self.entnorm(outputs)
                     targets = self.entnorm(targets) #0., 1., 0.3, 0., 0.9215659
 
-                    total_loss += self.criterion[0][0](outputs, targets, masks).item()
+                    total_loss += self.criterion[0][0](outputs, targets, masks).item() * outputs.shape[0]
 
                     #calculate inlet loss
                     if len(outputs.shape) == 5:
@@ -179,8 +179,10 @@ class Trainer():
                     else:
                         output_mean = outputs[:, 0, 2].mean(dim=(-1))
                         target_mean = targets[:, 0, 2].mean(dim=(-1))
-                    mean_loss = mean_loss_function()(output_mean, target_mean)
-                    total_mean_loss += mean_loss.item()
+                    
+                    mean_loss = MAELoss()(output_mean, target_mean)
+                    total_mean_loss += mean_loss.item() * outputs.shape[0]
+
                     if verbose:
                         result = individual_criterium(outputs, targets, masks, names)
                         individual_error.update(result)
@@ -201,7 +203,7 @@ class Trainer():
                 #self.writer.add_graph(self.model)
 
 
-        return total_loss / len(self.test_loader), total_mean_loss / len(self.test_loader)
+        return total_loss / len(self.test_loader.dataset), total_mean_loss / len(self.test_loader.dataset)
     
 
     def printProgress(self, epoch, train_loss, val_loss, val_loss_in, epoch_duration):

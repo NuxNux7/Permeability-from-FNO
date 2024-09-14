@@ -12,9 +12,9 @@ import random
 import math
 import csv
 
-from permFNO.data.dataReader import load_dataset, load_dataset_fast, create_mask
-from permFNO.data.dataWriter import saveH5PY
-from permFNO.data.normalization import entnormalize_new, normalize_new
+from .dataReader import load_dataset, load_dataset_fast, create_mask
+from .dataWriter import saveH5PY
+from .normalization import entnormalize_new, normalize_new
 
 
 class DictDataset(Dataset):
@@ -77,11 +77,10 @@ def split_full_dataset(path, split, random_split=True):
         train_indices = random.sample(indices, train_size)
     else:
         train_indices = list(set(indices) - set(range(2, size, 10)))
-    print(train_indices)
     if rotation:
-        shape = ((train_size * 4), 1, file["input"]["fill"].shape[2], file["input"]["fill"].shape[3], file["input"]["fill"].shape[4])
+        shape = (len(train_indices) * 4, 1, file["input"]["fill"].shape[2], file["input"]["fill"].shape[3], file["input"]["fill"].shape[4])
     else:
-        shape = (train_size, 1, file["input"]["fill"].shape[2], file["input"]["fill"].shape[3])
+        shape = (len(train_indices), 1, file["input"]["fill"].shape[2], file["input"]["fill"].shape[3])
     inputs = {"fill": np.zeros(shape, dtype=np.float32)}
     outputs = {"p": np.zeros(shape, dtype=np.float32)}
     names = []
@@ -107,6 +106,34 @@ def split_full_dataset(path, split, random_split=True):
             counter += 1
     
     new_name = path.removesuffix('.h5') + "_train.h5"
+
+    # remove the test sets reverse and rotated simulations
+    test_indixes = list(set(indices) - set(train_indices))
+    for index in test_indixes:
+        name = file["name"][4 * index].decode("ascii")
+        name = name.split('_')
+        name_pos = int(name[1])
+
+        print()
+        print("looking at ", name)
+
+        counter = 0
+        for name_train in names:
+            if ("_" + str(name_pos) + "_") in name_train:
+                rm = [counter, counter+1, counter+2, counter+3]
+                inputs["fill"] = np.delete(inputs["fill"], rm, axis=0)
+                outputs["p"] = np.delete(outputs["p"], rm, axis=0)
+                print("removed ", name_train)
+                break
+              
+            counter += 1
+        
+        names.pop(counter)
+        names.pop(counter)
+        names.pop(counter)
+        names.pop(counter)
+
+    print(len(names), inputs["fill"].shape[0])
     saveH5PY(inputs, outputs, names, file["bounds"], new_name)
 
     # test
@@ -229,8 +256,6 @@ def analyse_dataset(dataset, dataset2=None):
         skip = 1
     skip = 1
 
-    print(dataset.names[2], p[2,0,4].mean() )
-
     for i in range(0, p.shape[0], skip):
         #name = dataset.names[i]
         result = p[i]
@@ -241,6 +266,8 @@ def analyse_dataset(dataset, dataset2=None):
     p_inlet = dict(sorted(p_inlet.items(), key=lambda item: item[1], reverse=True))
     p_inlet2 = dict(sorted(p_inlet2.items(), key=lambda item: item[1], reverse=True))
     p_max = dict(sorted(p_max.items(), key=lambda item: item[1], reverse=True))
+
+    print(p_inlet)
 
 
     # plot histogram
@@ -302,12 +329,12 @@ def analyse_dataset(dataset, dataset2=None):
 
     plt.savefig('p_maxes.png')'''
 
-    p_inlet = dict(sorted(p_inlet.items(), key=lambda item: item[1], reverse=False))
+    #p_inlet = dict(sorted(p_inlet.items(), key=lambda item: item[1], reverse=False))
     #for p, name in p_inlet.items():
         #print(name, ": ", p)
 
 
-    with open("p_inlets.csv", "w", newline="") as f:
+    '''with open("p_inlets.csv", "w", newline="") as f:
         w = csv.DictWriter(f, p_inlet.keys())
         w.writeheader()
         w.writerow(p_inlet)
@@ -315,7 +342,7 @@ def analyse_dataset(dataset, dataset2=None):
     with open("p_maxes.csv", "w", newline="") as f:
         w = csv.DictWriter(f, p_max.keys())
         w.writeheader()
-        w.writerow(p_max)
+        w.writerow(p_max)'''
 
     return p_max
 
@@ -323,14 +350,15 @@ def analyse_dataset(dataset, dataset2=None):
 if __name__ == "__main__":
     import os
 
-    basefile = '/home/woody/iwia/iwia057h/2D/2D_rocks'
+    basefile = '/home/woody/iwia/iwia057h/external/5Scaling_Interpol'
     path = basefile + '.h5'
 
-    #filter_dataset(path, 95, 1.11)
+    #filter_dataset(path, 90)
 
-    '''split_full_dataset(path, 0.9, random_split=False)
+    path = basefile + '_filtered_90.h5'
+    split_full_dataset(path, 0.9, random_split=False)
 
-    path = basefile + '_train.h5'
+    '''path = basefile + '_train.h5'
     split_full_dataset(path, (8/9), random_split=False)
 
     old = basefile + '_train_train.h5'

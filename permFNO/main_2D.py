@@ -35,22 +35,28 @@ def main(load_checkpoint: bool = False,
         os.makedirs(folder, exist_ok=True)
 
     # Hyperparameters
-    batch_size = 30
+    batch_size = 25
     learning_rate = 2.5e-3
     epochs = 75
 
     # Create data loaders
-    name_dataset = "2D_full_filtered_99"
+    name_dataset = "2D_full"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_test.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_test_rocks.h5",
                                     h5=True, masking=True)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
         #analyse_dataset(test_dataset)
 
+        #print(test_dataset.getBounds())
 
-        #inputs, targets, mask, name = train_dataset[0]
-        #saveArraysToVTK(inputs[0], targets[0], targets[0], mask[0], "test.vtk")
+
+        inputs, targets, mask, name = train_dataset[0]
+
+        #for inputs, targets, mask, name in train_dataset:
+            #print(name)
+            
+        #saveArraysToVTK(inputs[0], mask[0], targets[0], mask[0], "test.vtk")
 
         #print(len(test_dataset))
         #return
@@ -82,7 +88,7 @@ def main(load_checkpoint: bool = False,
         fno_modes=[80, 64],
         padding=8,
         decoder_net=decoderNet,
-        coord_features=False,           # TESTING
+        coord_features=True,           # TESTING
         functional=True,
         weight_sharing=False,
         weight_norm=True,
@@ -100,7 +106,7 @@ def main(load_checkpoint: bool = False,
     criterion = [(criterion_domain, 1.)]    #, (criterion_inlet, 0.)]
 
     # Initialize the optimizer with Cosine LR
-    gradient_accumulation = 1
+    gradient_accumulation = 1   #TODO CHANGE!!!!!
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = CosineWithWarmupScheduler(optimizer, 250, ((len(train_loader) // gradient_accumulation) * epochs), min_lambda=0.05)
 
@@ -143,4 +149,4 @@ if __name__ == "__main__":
     torch.backends.cudnn.allow_tf32 = True
 
     evaluation = True
-    main(load_checkpoint=(False or evaluation), name="8l_2D_fulll_nocoord" , evaluation=evaluation)
+    main(load_checkpoint=(False or evaluation), name="2D/8l_functional_full" , evaluation=evaluation)

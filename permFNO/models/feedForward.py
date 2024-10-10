@@ -35,7 +35,7 @@ class FeedForwardBlock(nn.Module):
             layers = []
             layers.append(conv_class(input_channel, output_channel, 1))
             if use_weight_norm:
-                weight_norm(layers[0])
+                layers[0] = weight_norm(layers[0])
             
             if batch_norm:
                 layers.append(bn_class(output_channel))

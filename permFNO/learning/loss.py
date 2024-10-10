@@ -192,7 +192,6 @@ class R2Score(nn.Module):
         mean_distance = target - mean_target
         mean_distance = torch.pow(mean_distance, 2)
         
-        print(target.shape)
         #print(mean_distance.sum() / len(target))
         if len(target) == 1:      #guess work
             mean_distance = torch.empty_like(target).fill_(0.1)

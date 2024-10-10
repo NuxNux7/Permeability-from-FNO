@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import os
+import time
 
 from learning.scheduler import CosineWithWarmupScheduler
 from learning.loss import *
@@ -15,6 +16,8 @@ from data.normalization import Entnormalizer
 from models.fno import FNOArch
 from models.siren import SirenArch
 from models.feedForward import FeedForwardBlock
+
+from models.original_FFNO.mesh_3d import FNOFactorizedMesh3D
 
 from learning.trainer import Trainer
 
@@ -33,21 +36,20 @@ def main(load_checkpoint: bool = False,
         os.makedirs(folder, exist_ok=True)
 
     # Hyperparameters
-    batch_size = 6
+    batch_size = 7
     learning_rate = 2.5e-3
-    epochs = 75
+    epochs = 50
 
     # Create data loaders
-    name_dataset = "5Scaling_Interpol"
+    name_dataset = "spheres/150"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_test.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_validation_new.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
                                     h5=True, masking=True)
-        len(test_dataset)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
         #analyse_dataset(test_dataset)
 
-        #inputs, targets, mask, _ = test_dataset[2]
+        #inputs, targets, mask, _ = test_dataset[56]
         #saveArraysToVTK(inputs[0], mask[0], targets[0], mask[0], "test.vtk")
         #return
     else:
@@ -65,7 +67,6 @@ def main(load_checkpoint: bool = False,
     
     
     # Initialize the model
-
     #decoderNet = FeedForwardBlock(dims=3, fno_layer_size=32, num_blocks=2,
                                   #factor=4, activation_fn=None,
                                   #use_weight_norm=True)
@@ -73,19 +74,22 @@ def main(load_checkpoint: bool = False,
 
     model = FNOArch(
         dimension=3,
-        nr_fno_layers=8,
+        nr_fno_layers=4,
         nr_ff_blocks=2,
-        fno_modes=[24, 16, 16],
+        fno_modes=[32, 16, 16],
         padding=8,
         decoder_net=decoderNet,
         coord_features=True,
-        functional=True,
+        functional=False,
         weight_sharing=False,
         weight_norm=True,
         batch_norm=False,
         dropout=False,
     ).to(device)
 
+    #model = FNOFactorizedMesh3D(24, 16, 16, 32, 4, 1, 8, False, 4, True, 2, False).to(device)
+
+    print("Tunable Parameter: ", sum(p.numel() for p in model.parameters()))
     #print(model)
     #summary(model, (1, 128, 64, 64))
 
@@ -125,10 +129,10 @@ def main(load_checkpoint: bool = False,
         f"Val Loss Inlet: {val_loss_in}")
 
     else:
+       start = time.time()
        trainer.trainRun(epoch)
-
-    #train_dataset.close()
-    #test_dataset.close()
+       end = time.time()
+       print("runtime: ", end-start)
 
 
 
@@ -139,4 +143,5 @@ if __name__ == "__main__":
     torch.backends.cudnn.allow_tf32 = True
 
     evaluation = True
-    main(load_checkpoint=(True or evaluation), name="external_8l_5_interpol_huber" , evaluation=evaluation)
+    #woody = "/home/woody/iwia/iwia057h/spheres/spheres/"
+    main(load_checkpoint=(False or evaluation), name="spheres/performance" , evaluation=evaluation)

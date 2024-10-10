@@ -37,6 +37,7 @@ class FNO2DEncoder(nn.Module):
         padding_type: str = "constant",
         activation_fn = nn.GELU(),
         coord_features: bool = True,
+        use_weight_norm = False,
     ) -> None:
 
         super().__init__()
@@ -44,6 +45,8 @@ class FNO2DEncoder(nn.Module):
         self.nr_fno_layers = nr_fno_layers
         self.fno_width = fno_layer_size
         self.coord_features = coord_features
+        self.use_weight_norm = use_weight_norm
+
         # Spectral modes to have weights
         if isinstance(fno_modes, int):
             fno_modes = [fno_modes, fno_modes]
@@ -56,7 +59,9 @@ class FNO2DEncoder(nn.Module):
         self.conv_layers = nn.ModuleList()
 
         # Initial lift layer
-        self.lift_layer = nn.Conv2d(self.in_channels, self.fno_width)
+        self.lift_layer = nn.Conv2d(self.in_channels, self.fno_width, 1)
+        if self.use_weight_norm:
+            self.lift_layer = weight_norm(self.lift_layer)
 
         # Build Neural Fourier Operators
         for _ in range(self.nr_fno_layers):
@@ -65,7 +70,10 @@ class FNO2DEncoder(nn.Module):
                     self.fno_width, self.fno_width, fno_modes[0], fno_modes[1]
                 )
             )
-            self.conv_layers.append(nn.Conv2d(self.fno_width, self.fno_width, 1))
+            conv = nn.Conv2d(self.fno_width, self.fno_width, 1)
+            if self.use_weight_norm:
+                conv = weight_norm(conv)
+            self.conv_layers.append(conv)
 
         # Padding values for spectral conv
         if isinstance(padding, int):
@@ -124,6 +132,7 @@ class FNO3DEncoder(nn.Module):
         padding_type: str = "constant",
         activation_fn = nn.GELU(),
         coord_features: bool = True,
+        use_weight_norm = False,
 
     ) -> None:
         super().__init__()
@@ -132,6 +141,8 @@ class FNO3DEncoder(nn.Module):
         self.nr_fno_layers = nr_fno_layers
         self.fno_width = fno_layer_size
         self.coord_features = coord_features
+        self.use_weight_norm = use_weight_norm
+
         # Spectral modes to have weights
         if isinstance(fno_modes, int):
             fno_modes = [fno_modes, fno_modes, fno_modes]
@@ -145,6 +156,8 @@ class FNO3DEncoder(nn.Module):
 
         # Initial lift layer
         self.lift_layer = nn.Conv3d(self.in_channels, self.fno_width, 1)
+        if self.use_weight_norm:
+            self.lift_layer = weight_norm(self.lift_layer)
 
         # Build Neural Fourier Operators
         for _ in range(self.nr_fno_layers):
@@ -157,7 +170,11 @@ class FNO3DEncoder(nn.Module):
                     fno_modes[2],
                 )
             )
-            self.conv_layers.append(nn.Conv3d(self.fno_width, self.fno_width, 1))
+
+            conv = nn.Conv3d(self.fno_width, self.fno_width, 1)
+            if self.use_weight_norm:
+                conv = weight_norm(conv)
+            self.conv_layers.append(conv)
 
         # Padding values for spectral conv
         if isinstance(padding, int):
@@ -257,7 +274,7 @@ class FunctionalFNO2DEncoder(nn.Module):
         # Initial lift layer
         self.lift_layer = nn.Conv2d(self.in_channels, self.fno_width, kernel_size=1)
         if self.use_weight_norm:
-            weight_norm(self.lift_layer)
+            self.lift_layer = weight_norm(self.lift_layer)
 
         # Initialize weights
         if self.weight_sharing:
@@ -392,7 +409,7 @@ class FunctionalFNO3DEncoder(nn.Module):
         # Initial lift layer
         self.lift_layer = nn.Conv3d(self.in_channels, self.fno_width, 1)
         if self.use_weight_norm:
-            weight_norm(self.lift_layer)
+            self.lift_layer = weight_norm(self.lift_layer)
 
         # Initialize weights
         if self.weight_sharing:
@@ -620,6 +637,7 @@ class FNOArch(nn.Module):
         self.padding_type = padding_type
         self.activation_fn = nn.GELU()
         self.coord_features = coord_features
+        self.weight_norm = weight_norm
 
         # decoder net
         self.decoder_net = decoder_net
@@ -627,7 +645,6 @@ class FNOArch(nn.Module):
         # F-FNO
         self.functional = functional
         self.weight_sharing = weight_sharing
-        self.weight_norm = weight_norm
         self.batch_norm = batch_norm
         self.dropout = dropout
 
@@ -691,6 +708,7 @@ class FNOArch(nn.Module):
                 padding_type=self.padding_type,
                 activation_fn=self.activation_fn,
                 coord_features=self.coord_features,
+                use_weight_norm=self.weight_norm
             )
 
     def forward(self, input: Tensor) -> Tensor:

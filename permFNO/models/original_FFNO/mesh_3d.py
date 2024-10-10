@@ -131,7 +131,7 @@ class FNOFactorizedMesh3D(nn.Module):
         if share_weight:
             self.fourier_weight = nn.ParameterList([])
             for n_modes in [modes_x, modes_y, modes_z]:
-                weight = torch.FloatTensor(in_dim, out_dim, n_modes, 2)
+                weight = torch.FloatTensor(width, width, n_modes, 2)
                 param = nn.Parameter(weight)
                 nn.init.xavier_normal_(param)
                 self.fourier_weight.append(param)
@@ -158,10 +158,8 @@ class FNOFactorizedMesh3D(nn.Module):
             WNLinear(128, output_dim, wnorm=ff_weight_norm))
 
     def forward(self, x):
-        # added
-        x = x.permute(0, 2, 3, 4, 1)  # [B, H, X, Y, Z]
+        x = x.permute(0, 2, 3, 4, 1)
         grid = self.get_grid(x.shape, x.device)
-        
         x = torch.cat((x, grid), dim=-1)  # [B, X, Y, Z, 4]
         x = self.in_proj(x)  # [B, X, Y, Z, H]
         x = x.permute(0, 4, 1, 2, 3)  # [B, H, X, Y, Z]
@@ -175,8 +173,9 @@ class FNOFactorizedMesh3D(nn.Module):
 
         b = b[..., :-self.padding, :-self.padding, :-self.padding, :]
         output = self.out(b)
+        output = output.permute(0, 4, 1, 2, 3)
 
-        return output.permute(0, 4, 1, 2, 3)
+        return output
 
     def get_grid(self, shape, device):
         batchsize, size_x, size_y, size_z = shape[0], shape[1], shape[2], shape[3]

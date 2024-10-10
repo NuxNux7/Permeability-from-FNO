@@ -61,7 +61,7 @@ class SirenLayer(nn.Module):
         # set parameters and apply weight
         self.reset_parameters(use_weight_norm)
         if self.use_weight_norm:
-            weight_norm(self.linear)
+            self.linear = weight_norm(self.linear)
 
 
     def reset_parameters(self, use_weight_norm) -> None:

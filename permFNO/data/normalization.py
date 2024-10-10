@@ -10,9 +10,6 @@ def normalize_old(grid, scale, offset, pow, verbose=False):
     min_val = np.min(grid)
     max_val = np.max(grid)
 
-    print(min_val)
-    print(max_val)
-
     if verbose:
         big = len(grid[grid > 1.1])
         print("number of outlaws > 1.1: ", big, " with max: ", max_val)
@@ -28,6 +25,8 @@ def normalize_old(grid, scale, offset, pow, verbose=False):
         max_val = np.max(grid)
 
         grid = (grid - min_val) / (max_val - min_val)
+
+    grid = np.clip(grid, -0.1, 1.1)
     
     return grid, min_val, max_val
 

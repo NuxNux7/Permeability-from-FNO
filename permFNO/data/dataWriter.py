@@ -113,6 +113,23 @@ def saveH5PY(input_data, output_data, name_data, bounds, filename):
         f.create_dataset("bounds", data=bounds)
 
 
+def saveErrorPlot(outputs, targets, path):
+
+    plt.figure(figsize=(10,10))
+    plt.scatter(targets, outputs, c='crimson')
+    #plt.yscale('log')
+    #plt.xscale('log')
+
+    p1 = max(max(targets), max(outputs))
+    p2 = min(min(targets), min(outputs))
+    plt.plot([p1, p2], [p1, p2], 'b-')
+    plt.xlabel('True Values', fontsize=15)
+    plt.ylabel('Predictions', fontsize=15)
+    plt.axis('equal')
+
+    plt.savefig(path)
+
+
 def visualize(input_data, output_data, target_data, mask, output_folder):
 
     savePNG(input_data, output_data, target_data, mask, f"{output_folder}/slice.png")

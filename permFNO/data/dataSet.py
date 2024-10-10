@@ -71,7 +71,7 @@ def split_full_dataset(path, split, random_split=True):
     test_size = size - train_size
 
     indices = range(0, size)
-
+   
     # train
     if random_split:
         train_indices = random.sample(indices, train_size)
@@ -87,7 +87,6 @@ def split_full_dataset(path, split, random_split=True):
 
     counter = 0
     for i in train_indices:
-
         if rotation:
             num_rot = 4
         else:
@@ -105,37 +104,56 @@ def split_full_dataset(path, split, random_split=True):
 
             counter += 1
     
-    new_name = path.removesuffix('.h5') + "_train.h5"
+    new_name = path.removesuffix('.h5') + "_rocks.h5"
+
+    
+    # remove all non rocks sample 2D
+    '''offset = 0
+    for index in set(train_indices):
+        name = file["name"][index].decode("ascii")
+        name = name.split('_')
+        name_pos = int(name[2])
+
+        print(name_pos)
+
+
+        if name_pos > 1200 or name_pos <= 1000:
+            inputs["fill"] = np.delete(inputs["fill"], index-offset, axis=0)
+            outputs["p"] = np.delete(outputs["p"], index-offset, axis=0)
+            names.pop(index-offset)
+            print("removed")
+            offset += 1'''
 
     # remove the test sets reverse and rotated simulations
-    test_indixes = list(set(indices) - set(train_indices))
-    for index in test_indixes:
-        name = file["name"][4 * index].decode("ascii")
-        name = name.split('_')
-        name_pos = int(name[1])
+    if rotation:
+        test_indixes = list( - set(train_indices))
+        for index in test_indixes:
+            name = file["name"][4 * index].decode("ascii")
+            name = name.split('_')
+            name_pos = int(name[1])
 
-        print()
-        print("looking at ", name)
+            print()
+            print("looking at ", name)
 
-        counter = 0
-        for name_train in names:
-            if ("_" + str(name_pos) + "_") in name_train:
-                rm = [counter, counter+1, counter+2, counter+3]
-                inputs["fill"] = np.delete(inputs["fill"], rm, axis=0)
-                outputs["p"] = np.delete(outputs["p"], rm, axis=0)
-                print("removed ", name_train)
-                break
-              
-            counter += 1
-        
-        names.pop(counter)
-        names.pop(counter)
-        names.pop(counter)
-        names.pop(counter)
+            counter = 0
+            for name_train in names:
+                if ("_" + str(name_pos) + "_") in name_train:
+                    rm = [counter, counter+1, counter+2, counter+3]
+                    inputs["fill"] = np.delete(inputs["fill"], rm, axis=0)
+                    outputs["p"] = np.delete(outputs["p"], rm, axis=0)
+                    print("removed ", name_train)
+                    break
+                
+                counter += 1
+
+            names.pop(counter)
+            names.pop(counter)
+            names.pop(counter)
+            names.pop(counter)
 
     print(len(names), inputs["fill"].shape[0])
     saveH5PY(inputs, outputs, names, file["bounds"], new_name)
-
+    return
     # test
     test_indixes = list(set(indices) - set(train_indices))
     if rotation:
@@ -160,7 +178,7 @@ def split_full_dataset(path, split, random_split=True):
         counter += 1
 
     new_name = path.removesuffix('.h5') + "_test.h5"
-    saveH5PY(inputs, outputs, names, file["bounds"], new_name)
+    #saveH5PY(inputs, outputs, names, file["bounds"], new_name)
 
 
 def filter_dataset(path, percentile, threashold=None):
@@ -259,7 +277,7 @@ def analyse_dataset(dataset, dataset2=None):
     for i in range(0, p.shape[0], skip):
         #name = dataset.names[i]
         result = p[i]
-        p_inlet[i] = result[0,4].mean()
+        p_inlet[i] = result.max()
         p_inlet2[i] = p2[i][0,4].mean()
         p_max[i] = result.max()
 
@@ -350,13 +368,13 @@ def analyse_dataset(dataset, dataset2=None):
 if __name__ == "__main__":
     import os
 
-    basefile = '/home/woody/iwia/iwia057h/external/5Scaling_Interpol'
+    basefile = '/home/woody/iwia/iwia057h/2D/2D_full_test'
     path = basefile + '.h5'
 
     #filter_dataset(path, 90)
 
-    path = basefile + '_filtered_90.h5'
-    split_full_dataset(path, 0.9, random_split=False)
+    #path = basefile + '_filtered_90.h5'
+    split_full_dataset(path, 1, random_split=True)
 
     '''path = basefile + '_train.h5'
     split_full_dataset(path, (8/9), random_split=False)

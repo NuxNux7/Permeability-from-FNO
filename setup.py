@@ -12,5 +12,6 @@ setup(
         'h5py',
         'tensorboard',
         'tabulate',
+        'opt_einsum',
     ],
 )

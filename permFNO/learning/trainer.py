@@ -14,7 +14,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 print(project_root)
 sys.path.append(str(project_root))'''
 
-from permFNO.data.dataWriter import visualize, saveCSV
+from permFNO.data.dataWriter import visualize, saveCSV, saveErrorPlot
 from permFNO.data.normalization import Entnormalizer
 from .loss import *
 
@@ -62,7 +62,7 @@ class Trainer():
             epoch_start_time = time.time()
 
             train_loss = self.train()
-            val_loss, val_loss_in = self.evaluate(((epoch % 5) == 0))
+            val_loss, val_loss_in = self.evaluate(((epoch % 10) == 0))
 
             epoch_end_time = time.time()
             epoch_duration = epoch_end_time - epoch_start_time
@@ -72,7 +72,7 @@ class Trainer():
                           epoch_duration)
 
             # Save network
-            if (((epoch + 1) % 5) == 0) or (epoch == (self.epochs - 1)):
+            if (((epoch + 1) % 10) == 0) or (epoch == (self.epochs - 1)):
                 torch.save({
                 'epoch': epoch,
                 'model_state_dict': self.model.state_dict(),
@@ -160,6 +160,8 @@ class Trainer():
         total_mean_loss = 0
 
         with torch.no_grad():
+            outputs_mean = []
+            targets_mean = []
             for batch, (inputs, targets, masks, names) in enumerate(self.test_loader):
                 inputs, targets, masks  = inputs.to(self.device), targets.to(self.device), masks.to(self.device)
 
@@ -174,14 +176,14 @@ class Trainer():
 
                     #calculate inlet loss
                     if len(outputs.shape) == 5:
-                        output_mean = outputs[:, 0, 2].mean(dim=(-2, -1))
-                        target_mean = targets[:, 0, 2].mean(dim=(-2, -1))
+                        output_mean = outputs[:, 0, 0:12].mean(dim=(-3, -2, -1))       #TESTING 0:12
+                        target_mean = targets[:, 0, 0:12].mean(dim=(-3, -2, -1))       #TESTING 0:12
                     else:
-                        output_mean = outputs[:, 0, 2].mean(dim=(-1))
-                        target_mean = targets[:, 0, 2].mean(dim=(-1))
+                        output_mean = outputs[:, 0, 0:12].mean(dim=(-2, -1))
+                        target_mean = targets[:, 0, 0:12].mean(dim=(-2, -1))
                     
-                    mean_loss = MAELoss()(output_mean, target_mean)
-                    total_mean_loss += mean_loss.item() * outputs.shape[0]
+                    outputs_mean.extend(output_mean.tolist())
+                    targets_mean.extend(target_mean.tolist())
 
                     if verbose:
                         result = individual_criterium(outputs, targets, masks, names)
@@ -194,16 +196,31 @@ class Trainer():
                         target_sample = targets[0][0].cpu().numpy()
                         mask_sample = masks[0][0].cpu().numpy()
                         self.writer.add_graph(self.model, torch.unsqueeze(inputs[0], 0))
+                        visualize(input_sample, output_sample, target_sample, mask_sample, self.folder)
 
             # print result
             if verbose:
                 visualize(input_sample, output_sample, target_sample, mask_sample, self.folder)
                 individual_error = {key: [individual_error[key], individual_error_mean[key]] for key in individual_error}
+                #print("max error mean: ", torch.tensor(individual_error_mean.values()).max())
                 saveCSV(individual_error, (self.folder + "/errors.csv"))
+                saveErrorPlot(outputs_mean, targets_mean, (self.folder + "/errors.png"))
                 #self.writer.add_graph(self.model)
 
+                mare = MARELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
+                mae = MAELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
+                r2 = R2Score()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
+                max_mae = -1.
+                for k, v in individual_error_mean.items():
+                    error = float(v)
+                    if error > max_mae:
+                        max_mae = error
 
-        return total_loss / len(self.test_loader.dataset), total_mean_loss / len(self.test_loader.dataset)
+                print("MAE:", mae, "MARE:", mare, "R2:", r2, "Max MAE:", max_mae)
+            
+
+
+        return total_loss / len(self.test_loader.dataset), MARELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
     
 
     def printProgress(self, epoch, train_loss, val_loss, val_loss_in, epoch_duration):

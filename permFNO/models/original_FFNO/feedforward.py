@@ -13,7 +13,7 @@ class FeedForward(nn.Module):
             self.layers.append(nn.Sequential(
                 WNLinear(in_dim, out_dim, wnorm=ff_weight_norm),
                 nn.Dropout(dropout),
-                nn.GELU() if i < n_layers - 1 else nn.Identity(),             #changed from nn.ReLU(inplace=True)
+                nn.ReLU(inplace=True) if i < n_layers - 1 else nn.Identity(),
                 nn.LayerNorm(out_dim) if layer_norm and i == n_layers -
                 1 else nn.Identity(),
             ))

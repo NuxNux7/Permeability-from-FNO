@@ -31,7 +31,7 @@ from .normalization import *
 
 
 # MAIN FUNCTION
-def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=False, masking=True, calc_p_in=False, dim=3):
+def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=False, masking=True, calc_p_in=False, dim=3, spheres=False):
     "Loads a FNO dataset"
 
     size = len(os.listdir(path))
@@ -39,9 +39,15 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
         size = 4 * size
 
     if scaling:
-        shape = (size, 1, 96, 64, 64)
+        if spheres:
+            shape = (size, 1, 128, 64, 64)
+        else:
+            shape = (size, 1, 96, 64, 64)
     else:
-        shape = (size, 1, 190, 126, 126)
+        if spheres:
+            shape = (size, 1, 256, 128, 128)
+        else:
+            shape = (size, 1, 190, 126, 126)
     if dim == 2:
         shape = (size, 1, 320, 256)
 
@@ -75,26 +81,30 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
             continue
 
         #calculate path
-        geometry_file, density_key = get_geometry_path(file, dim)
-
-        dict_geometry = load_VTI(path_geometry + "/" + geometry_file, scaling, cells=True, swapZX=(dim==3), shape=shape[2:])
-        dict_simulation = load_VTI(path + "/" + file, scaling, cells=True, swapZX=(dim==3), shape=shape[2:])
+        if not spheres:
+            geometry_file, density_key = get_geometry_path(file, dim)
+            dict_geometry = load_VTI(path_geometry + "/" + geometry_file, scaling, cells=True, swapZX=(dim==3), shape=shape[2:])
+        dict_simulation = load_VTI(path + "/" + file, scaling, cells=True, swapZX=(dim==3 and not spheres), shape=shape[2:])
         print("loaded file: ", (counter + 1), "/", size)
 
-        #invar["fill"][counter] = dict_simulation["OverlapFraction"]
-        #outvar["p"][counter] = dict_simulation["Density"]
-        invar["fill"][counter] = dict_geometry['NoSlip']
-        outvar["p"][counter] = dict_simulation[density_key]
+        if spheres:
+            invar["fill"][counter] = dict_simulation["OverlapFraction"]
+            outvar["p"][counter] = dict_simulation["Density"]
+        else:
+            invar["fill"][counter] = dict_geometry['NoSlip']
+            outvar["p"][counter] = dict_simulation[density_key]
         
         counter = counter + 1
 
         # rotate for increased dataset
         if rotate:
             for _ in range(3):
-                #invar["fill"][counter] = np.rot90(dict["OverlapFraction"], k=1, axes=(-2,-1))
-                #outvar["p"][counter] = np.rot90(dict["Density"], k=1, axes=(-2,-1))
-                invar["fill"][counter] = np.rot90(dict_geometry['NoSlip'], k=1, axes=(-2,-1))
-                outvar["p"][counter] = np.rot90(dict_simulation[density_key], k=1, axes=(-2,-1))
+                if spheres:
+                    invar["fill"][counter] = np.rot90(dict_simulation["OverlapFraction"], k=1, axes=(-2,-1))
+                    outvar["p"][counter] = np.rot90(dict_simulation["Density"], k=1, axes=(-2,-1))
+                else:
+                    invar["fill"][counter] = np.rot90(dict_geometry['NoSlip'], k=1, axes=(-2,-1))
+                    outvar["p"][counter] = np.rot90(dict_simulation[density_key], k=1, axes=(-2,-1))
                 counter = counter + 1
             
     # calculate mask for lambda weighting using fill
@@ -111,10 +121,17 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
 
     # get bounds for normalization
 
-    offset = 0
-    scale = 1
-    pow = 0.5
-    outvar["p"], min_pow, max_pow = normalize_new(outvar["p"], pow)    # changed from external:12 old: 135 (125)
+    if spheres:
+        pow = 1
+        scale = 1
+        offset = 1
+        outvar["p"], min_pow, max_pow = normalize_old(outvar["p"], scale, offset, pow, True)    # changed from external:12 old: 135 (125)
+    else:
+        pow = 0.5
+        scale = 1
+        offset = 0
+        outvar["p"], min_pow, max_pow = normalize_new(outvar["p"], pow)
+
     invar["fill"], _, _ = normalize_new(invar["fill"], 1)
     bounds = [offset, scale, pow, min_pow, max_pow]
     #bounds = [0, 1, 1, 0, 1]
@@ -203,7 +220,12 @@ def create_mask(fill, calc_p_in):
     mask["p"] = (1. - fill[:]) * 0.8 + 0.1
 
     for i in range(fill.shape[0]):
-        mask["p"][i][0][1:4][:][:] = 1
+        #if len(fill.shape) == 5:
+        mask["p"][i][0][0:12][:][:] = 1  #TESTING 0:12
+        #else:
+            #mask["p"][i][0][0:32][:][:] = 1 
+    
+    print(mask["p"].shape)
 
     return mask
 
@@ -351,17 +373,18 @@ if __name__ == "__main__":
     import h5py
     import numpy as np
 
-    rotate = True
+    rotate = False
 
     invar, outvar, _, names, bounds = load_dataset(
-        "/home/woody/iwia/iwia057h/external/ownSimulations/simulation",
-        "/home/woody/iwia/iwia057h/external/ownSimulations/geometry",
+        "/home/woody/iwia/iwia057h/2D/simulation",
+        "/home/woody/iwia/iwia057h/2D/geometry",
         rotate=rotate, scaling=True, masking=False, calc_p_in=False,
-        dim=3
+        dim=2,
+        spheres=False
     )
 
+    # change names with rotation
     new_names = []
-
     if rotate:
         for pos, name in enumerate(names):
             new_names.append(name + "0")
@@ -370,13 +393,24 @@ if __name__ == "__main__":
             new_names.append(name + "3")
     else:
         new_names = names
-    
+
     res = np.array(new_names)
 
-    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/external/5Scaling_interpol.h5")
+    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/2D/extended.h5")
+
+    '''file = h5py.File("/home/woody/iwia/iwia057h/external/spheres/unnorm_validation_new.h5", 'r')
+    outputs = {}
+    outputs["p"], _, _ = normalize_old(np.array(file["output"]["p"]), 150, 0, 1, True)
+
+    names = []
+    for name in file["name"]:
+        names.append(name.decode("ascii"))
+    saveH5PY(file["input"], outputs, names, file["bounds"], "/home/woody/iwia/iwia057h/external/spheres/150_validation_150_new.h5")'''
+
 
     '''for input, output, name in zip(invar.values(), outvar.values(), names):
         data_dict = {"fill":    input,
                      "p":       output }
         saveDictToVTK(data_dict, ("/home/vault/iwia/iwia057h/data/scaled/shifted/test/scaled" + name + ".vti"))'''
+    
     

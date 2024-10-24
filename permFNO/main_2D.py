@@ -30,7 +30,6 @@ def main(load_checkpoint: bool = False,
     # Setup folder
     folder = os.getcwd() + "/output/" + name
     cwd = os.getcwd()
-    print(cwd)
     if not load_checkpoint:
         os.makedirs(folder, exist_ok=True)
 
@@ -40,9 +39,9 @@ def main(load_checkpoint: bool = False,
     epochs = 75
 
     # Create data loaders
-    name_dataset = "2D_full"
+    name_dataset = "2D"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_test_rocks.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_validation.h5",
                                     h5=True, masking=True)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
@@ -83,7 +82,7 @@ def main(load_checkpoint: bool = False,
 
     model = FNOArch(
         dimension=2,
-        nr_fno_layers=8,
+        nr_fno_layers=2,
         nr_ff_blocks=2,
         fno_modes=[80, 64],
         padding=8,
@@ -148,5 +147,5 @@ if __name__ == "__main__":
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    evaluation = True
-    main(load_checkpoint=(False or evaluation), name="2D/8l_functional_full" , evaluation=evaluation)
+    evaluation = False
+    main(load_checkpoint=(False or evaluation), name="2D/2l_functional" , evaluation=evaluation)

@@ -34,6 +34,8 @@ from .normalization import *
 def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=False, masking=True, calc_p_in=False, dim=3, spheres=False):
     "Loads a FNO dataset"
 
+    spheres = True
+
     size = len(os.listdir(path))
     if rotate:
         size = 4 * size
@@ -65,17 +67,19 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
     names = []
     counter = 0
     for file in os.listdir(path):
-        names.append(os.path.basename(file))
 
         if dim == 2:
             name = os.path.basename(file).split('_')
             sample = int(name[2])
         
-            #if sample in range(1001, 2670, 1):
+            #if sample < 2000:
                 #continue
 
             #if counter >= size:
                 #continue
+
+        names.append(os.path.basename(file))
+
 
         if not file.endswith('.vti'):
             continue
@@ -106,7 +110,8 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
                     invar["fill"][counter] = np.rot90(dict_geometry['NoSlip'], k=1, axes=(-2,-1))
                     outvar["p"][counter] = np.rot90(dict_simulation[density_key], k=1, axes=(-2,-1))
                 counter = counter + 1
-            
+    print(len(names))
+    
     # calculate mask for lambda weighting using fill
     if masking:
         mask = create_mask(invar["fill"], calc_p_in)
@@ -221,7 +226,7 @@ def create_mask(fill, calc_p_in):
 
     for i in range(fill.shape[0]):
         #if len(fill.shape) == 5:
-        mask["p"][i][0][0:12][:][:] = 1  #TESTING 0:12
+        mask["p"][i][0][0:12][:][:] = 1
         #else:
             #mask["p"][i][0][0:32][:][:] = 1 
     
@@ -396,7 +401,7 @@ if __name__ == "__main__":
 
     res = np.array(new_names)
 
-    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/2D/extended.h5")
+    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/2D/2D_noise.h5")
 
     '''file = h5py.File("/home/woody/iwia/iwia057h/external/spheres/unnorm_validation_new.h5", 'r')
     outputs = {}

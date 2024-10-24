@@ -13,7 +13,7 @@ import math
 import csv
 
 from .dataReader import load_dataset, load_dataset_fast, create_mask
-from .dataWriter import saveH5PY
+from .dataWriter import saveH5PY, saveErrorPlot
 from .normalization import entnormalize_new, normalize_new
 
 
@@ -26,7 +26,7 @@ class DictDataset(Dataset):
             self.lables = self.h5f["output"]
             self.names = self.h5f["name"]
             if "bounds" in self.h5f:
-                self.bounds = self.h5f["bounds"]            #[offset, scale, power, min_power, max_power]
+                self.bounds = self.h5f["bounds"]            #[offset, scale, power, min_power, max_power] [1.001, 1.0000] - 1 * 1000
             else:
                 self.bounds = [1., 12., 1., 0., 1.]
             self.masks = None
@@ -40,6 +40,10 @@ class DictDataset(Dataset):
 
         self.size = self.inputs["fill"].shape[0]
 
+        # shape input: [batch, 1, x, y, z]
+        # shape output: [batch, 1, x, y, z] -> [batch, 1]
+
+        # transformation: self.output[:, 0, 0:12, :, :].mean()
 
     def __len__(self):
         return self.size
@@ -56,6 +60,28 @@ class DictDataset(Dataset):
             self.h5f.close()
             np.allclose(self.inputs, self.lables)
 
+    def estimate_by_formula(self):
+        estimations = np.zeros([self.size])
+        targets = np.zeros([self.size])
+
+        for i in range(self.size):
+            estimations[i] = estimate_permeability_equation(self.inputs["fill"][i], self.names[i])
+            targets[i] = self.lables["p"][i][0:12, :, :].mean()
+
+        print("factor:", targets.mean() / estimations.mean())
+
+        saveErrorPlot(estimations, targets, "estimated_plot.png")
+
+        error = estimations - targets
+        error = np.power(error, 2)
+
+        mean_target = targets.mean()
+        mean_distance = targets - mean_target
+        mean_distance = np.power(mean_distance, 2)
+
+        r2 = 1 - (error.sum() / mean_distance.sum())
+
+        print("R2:", r2)
 
 def split_full_dataset(path, split, random_split=True):
     "split h5py dataset in two parts, separating independent of rotation, but depending on flow direction"
@@ -104,7 +130,7 @@ def split_full_dataset(path, split, random_split=True):
 
             counter += 1
     
-    new_name = path.removesuffix('.h5') + "_rocks.h5"
+    new_name = path.removesuffix('.h5') + "_train.h5"
 
     
     # remove all non rocks sample 2D
@@ -117,7 +143,7 @@ def split_full_dataset(path, split, random_split=True):
         print(name_pos)
 
 
-        if name_pos > 1200 or name_pos <= 1000:
+        if name_pos < 2000:
             inputs["fill"] = np.delete(inputs["fill"], index-offset, axis=0)
             outputs["p"] = np.delete(outputs["p"], index-offset, axis=0)
             names.pop(index-offset)
@@ -153,7 +179,6 @@ def split_full_dataset(path, split, random_split=True):
 
     print(len(names), inputs["fill"].shape[0])
     saveH5PY(inputs, outputs, names, file["bounds"], new_name)
-    return
     # test
     test_indixes = list(set(indices) - set(train_indices))
     if rotation:
@@ -178,7 +203,7 @@ def split_full_dataset(path, split, random_split=True):
         counter += 1
 
     new_name = path.removesuffix('.h5') + "_test.h5"
-    #saveH5PY(inputs, outputs, names, file["bounds"], new_name)
+    saveH5PY(inputs, outputs, names, file["bounds"], new_name)
 
 
 def filter_dataset(path, percentile, threashold=None):
@@ -247,7 +272,20 @@ def filter_dataset(path, percentile, threashold=None):
     new_path = path.removesuffix('.h5') + "_filtered_" + str(percentile) + ".h5"
     saveH5PY(input_new, output_new, names_new, bounds_new, new_path)
 
+def estimate_permeability_equation(geometry, name):
 
+    print(name)
+    name_arr = name.split('_')
+    diameter = int(name_arr[0]) + 0.1 * int(name_arr[1])
+    print("diameter:", diameter)
+
+    porousity = 1 - (geometry.sum() / (0.8 * geometry.shape[1] * geometry.shape[2] * geometry.shape[3]))
+    print("porousity:", porousity)
+    factor_scaling = 0.0015632130795060562
+
+    delta_p = (150 / pow(diameter, 2)) * ((1 - pow(porousity, 2)) / pow(porousity, 3)) * factor_scaling
+
+    return delta_p
 
 def analyse_dataset(dataset, dataset2=None):
     p_inlet = {}
@@ -368,13 +406,13 @@ def analyse_dataset(dataset, dataset2=None):
 if __name__ == "__main__":
     import os
 
-    basefile = '/home/woody/iwia/iwia057h/2D/2D_full_test'
+    basefile = '/home/woody/iwia/iwia057h/2D/2D_rocks'
     path = basefile + '.h5'
 
     #filter_dataset(path, 90)
 
     #path = basefile + '_filtered_90.h5'
-    split_full_dataset(path, 1, random_split=True)
+    split_full_dataset(path, 0.9, random_split=False)
 
     '''path = basefile + '_train.h5'
     split_full_dataset(path, (8/9), random_split=False)

@@ -39,9 +39,9 @@ def main(load_checkpoint: bool = False,
     epochs = 75
 
     # Create data loaders
-    name_dataset = "2D"
+    name_dataset = "2D_full_filtered_99"
     if evaluation:
-        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_validation.h5",
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/2D/" + name_dataset + "_test.h5",
                                     h5=True, masking=True)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
@@ -147,5 +147,5 @@ if __name__ == "__main__":
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    evaluation = False
-    main(load_checkpoint=(False or evaluation), name="2D/2l_functional" , evaluation=evaluation)
+    evaluation = True
+    main(load_checkpoint=(False or evaluation), name="8l_2D_fulll_nocoord" , evaluation=evaluation)

@@ -5,6 +5,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import os
 import time
+import time
 
 from learning.scheduler import CosineWithWarmupScheduler
 from learning.loss import *
@@ -16,6 +17,8 @@ from data.normalization import Entnormalizer
 from models.fno import FNOArch
 from models.siren import SirenArch
 from models.feedForward import FeedForwardBlock
+
+from models.original_FFNO.mesh_3d import FNOFactorizedMesh3D
 
 from models.original_FFNO.mesh_3d import FNOFactorizedMesh3D
 
@@ -38,6 +41,7 @@ def main(load_checkpoint: bool = False,
     # Hyperparameters
     batch_size = 8
     learning_rate = 2.5e-3
+    epochs = 50
     epochs = 50
 
     # Create data loaders
@@ -79,18 +83,23 @@ def main(load_checkpoint: bool = False,
     model = FNOArch(
         dimension=3,
         nr_fno_layers=4,
+        nr_fno_layers=4,
         nr_ff_blocks=2,
+        fno_modes=[32, 16, 16],
         fno_modes=[32, 16, 16],
         padding=8,
         decoder_net=decoderNet,
         coord_features=True,
-        functional=True,
+        functional=False,
         weight_sharing=False,
         weight_norm=True,
         batch_norm=False,
         dropout=False,
     ).to(device)
 
+    #model = FNOFactorizedMesh3D(24, 16, 16, 32, 4, 1, 8, False, 4, True, 2, False).to(device)
+
+    print("Tunable Parameter: ", sum(p.numel() for p in model.parameters()))
     #model = FNOFactorizedMesh3D(24, 16, 16, 32, 4, 1, 8, False, 4, True, 2, False).to(device)
 
     print("Tunable Parameter: ", sum(p.numel() for p in model.parameters()))
@@ -137,7 +146,10 @@ def main(load_checkpoint: bool = False,
 
     else:
        start = time.time()
+       start = time.time()
        trainer.trainRun(epoch)
+       end = time.time()
+       print("runtime: ", end-start)
        end = time.time()
        print("runtime: ", end-start)
 

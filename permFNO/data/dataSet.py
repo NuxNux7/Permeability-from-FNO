@@ -97,7 +97,7 @@ def split_full_dataset(path, split, random_split=True):
     test_size = size - train_size
 
     indices = range(0, size)
-   
+
     # train
     if random_split:
         train_indices = random.sample(indices, train_size)
@@ -130,7 +130,25 @@ def split_full_dataset(path, split, random_split=True):
 
             counter += 1
     
-    new_name = path.removesuffix('.h5') + "_train.h5"
+    new_name = path.removesuffix('.h5') + "_rocks.h5"
+
+    
+    # remove all non rocks sample 2D
+    '''offset = 0
+    for index in set(train_indices):
+        name = file["name"][index].decode("ascii")
+        name = name.split('_')
+        name_pos = int(name[2])
+
+        print(name_pos)
+
+
+        if name_pos > 1200 or name_pos <= 1000:
+            inputs["fill"] = np.delete(inputs["fill"], index-offset, axis=0)
+            outputs["p"] = np.delete(outputs["p"], index-offset, axis=0)
+            names.pop(index-offset)
+            print("removed")
+            offset += 1'''
 
     
     # remove all non rocks sample 2D
@@ -179,6 +197,7 @@ def split_full_dataset(path, split, random_split=True):
 
     print(len(names), inputs["fill"].shape[0])
     saveH5PY(inputs, outputs, names, file["bounds"], new_name)
+
     # test
     test_indixes = list(set(indices) - set(train_indices))
     if rotation:
@@ -203,7 +222,7 @@ def split_full_dataset(path, split, random_split=True):
         counter += 1
 
     new_name = path.removesuffix('.h5') + "_test.h5"
-    saveH5PY(inputs, outputs, names, file["bounds"], new_name)
+    #saveH5PY(inputs, outputs, names, file["bounds"], new_name)
 
 
 def filter_dataset(path, percentile, threashold=None):
@@ -406,12 +425,12 @@ def analyse_dataset(dataset, dataset2=None):
 if __name__ == "__main__":
     import os
 
-    basefile = '/home/woody/iwia/iwia057h/2D/2D_rocks'
+    basefile = '/home/woody/iwia/iwia057h/external/5Scaling_Interpol'
     path = basefile + '.h5'
 
     #filter_dataset(path, 90)
 
-    #path = basefile + '_filtered_90.h5'
+    path = basefile + '_filtered_90.h5'
     split_full_dataset(path, 0.9, random_split=False)
 
     '''path = basefile + '_train.h5'

@@ -18,10 +18,6 @@ from models.fno import FNOArch
 from models.siren import SirenArch
 from models.feedForward import FeedForwardBlock
 
-from models.original_FFNO.mesh_3d import FNOFactorizedMesh3D
-
-from models.original_FFNO.mesh_3d import FNOFactorizedMesh3D
-
 from learning.trainer import Trainer
 
 
@@ -45,21 +41,21 @@ def main(load_checkpoint: bool = False,
     epochs = 50
 
     # Create data loaders
-    name_dataset = "150"
+    name_dataset = "5Scaling_Interpol"
     if evaluation:
-        #test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_train.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
-                                    #h5=True, masking=True)
-        test_dataset = DictDataset("/home/vault/iwia/iwia057h/data/train/shifted/",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
-                                    fast=False, rotate=False, masking=False, scaling=False, h5=False)
+        test_dataset = DictDataset("/home/woody/iwia/iwia057h/external/" + name_dataset + "_test.h5",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
+                                    h5=True, masking=True)
+        #test_dataset = DictDataset("/home/vault/iwia/iwia057h/data/train/shifted/",         #"/home/vault/iwia/iwia057h/data/scaled/shifted/shiftedValidation.h5",
+                                    #fast=False, rotate=False, masking=False, scaling=False, h5=False)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
         #analyse_dataset(test_dataset)
 
-        train_dataset.estimate_by_formula()
+        #train_dataset.estimate_by_formula()
 
         #inputs, targets, mask, _ = test_dataset[56]
         #saveArraysToVTK(inputs[0], mask[0], targets[0], mask[0], "test.vtk")
-        return
+        #return
     else:
         train_dataset = DictDataset("/home/woody/iwia/iwia057h/external/spheres/" + name_dataset + "_train.h5",
                                     h5=True, masking=True)
@@ -82,30 +78,24 @@ def main(load_checkpoint: bool = False,
 
     model = FNOArch(
         dimension=3,
-        nr_fno_layers=4,
-        nr_fno_layers=4,
+        nr_fno_layers=8,
         nr_ff_blocks=2,
-        fno_modes=[32, 16, 16],
-        fno_modes=[32, 16, 16],
+        fno_modes=[24, 16, 16],
         padding=8,
         decoder_net=decoderNet,
         coord_features=True,
-        functional=False,
+        functional=True,
         weight_sharing=False,
         weight_norm=True,
         batch_norm=False,
         dropout=False,
     ).to(device)
 
-    #model = FNOFactorizedMesh3D(24, 16, 16, 32, 4, 1, 8, False, 4, True, 2, False).to(device)
 
-    print("Tunable Parameter: ", sum(p.numel() for p in model.parameters()))
-    #model = FNOFactorizedMesh3D(24, 16, 16, 32, 4, 1, 8, False, 4, True, 2, False).to(device)
-
+    # Print model parameters
     print("Tunable Parameter: ", sum(p.numel() for p in model.parameters()))
     #print(model)
     #summary(model, (1, 128, 64, 64))
-
 
     # Initialize the criterion
     criterion_domain = MaskedMSELoss()
@@ -117,6 +107,7 @@ def main(load_checkpoint: bool = False,
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = CosineWithWarmupScheduler(optimizer, 500, ((len(train_loader) // gradient_accumulation) * epochs), min_lambda=0.05)
 
+
     # Load checkpoint
     epoch = 0
     if load_checkpoint:
@@ -126,6 +117,7 @@ def main(load_checkpoint: bool = False,
         scheduler.load_state_dict(checkpoint["scheduler"])
         epoch = checkpoint["epoch"]
         print("Network loaded successfuly!")
+
 
     # Start run
     trainer = Trainer(model,
@@ -137,22 +129,11 @@ def main(load_checkpoint: bool = False,
                       entnormalizer)
     
     if evaluation:
-        start = time.time()
         val_loss, val_loss_in = trainer.evaluate(verbose=False)
-        end = time.time()
-        print("runtime: ", end-start)
-        print(f"Val Loss General: {val_loss}, "
-        f"Val Loss Inlet: {val_loss_in}")
+        print(f"Val Loss General: {val_loss}, " f"Val Loss Inlet: {val_loss_in}")
 
     else:
-       start = time.time()
-       start = time.time()
        trainer.trainRun(epoch)
-       end = time.time()
-       print("runtime: ", end-start)
-       end = time.time()
-       print("runtime: ", end-start)
-
 
 
 if __name__ == "__main__":
@@ -161,6 +142,5 @@ if __name__ == "__main__":
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    evaluation = False
-    #woody = "/home/woody/iwia/iwia057h/spheres/spheres/"
-    main(load_checkpoint=(False or evaluation), name="spheres/4l_functional_2" , evaluation=evaluation)
+    evaluation = True
+    main(load_checkpoint=(False or evaluation), name="external/8l_functional_mask" , evaluation=evaluation)

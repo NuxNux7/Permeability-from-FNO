@@ -218,19 +218,11 @@ def create_mask(fill, calc_p_in):
 
     if calc_p_in:
         mask["p_in"] = np.ones((fill.shape[0], 1, 1, 1, 1))
-    
-    # emphesizing the inlet preassure
-    #mask["p"][fill[:] <= 0] = 0.9 * np.ones((fill.shape))[fill[:] <= 0 ]
 
     mask["p"] = (1. - fill[:]) * 0.8 + 0.1
 
     for i in range(fill.shape[0]):
-        #if len(fill.shape) == 5:
         mask["p"][i][0][0:12][:][:] = 1
-        #else:
-            #mask["p"][i][0][0:32][:][:] = 1 
-    
-    print(mask["p"].shape)
 
     return mask
 
@@ -381,10 +373,10 @@ if __name__ == "__main__":
     rotate = False
 
     invar, outvar, _, names, bounds = load_dataset(
-        "/home/woody/iwia/iwia057h/2D/simulation",
-        "/home/woody/iwia/iwia057h/2D/geometry",
+        "/home/woody/iwia/iwia057h/external/ownSimulation/simulation",
+        "/home/woody/iwia/iwia057h/external/ownSimulation/geometries",
         rotate=rotate, scaling=True, masking=False, calc_p_in=False,
-        dim=2,
+        dim=3,
         spheres=False
     )
 
@@ -401,7 +393,7 @@ if __name__ == "__main__":
 
     res = np.array(new_names)
 
-    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/2D/2D_noise.h5")
+    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/external/new.h5")
 
     '''file = h5py.File("/home/woody/iwia/iwia057h/external/spheres/unnorm_validation_new.h5", 'r')
     outputs = {}

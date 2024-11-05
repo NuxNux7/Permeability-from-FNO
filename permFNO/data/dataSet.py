@@ -307,9 +307,10 @@ def estimate_permeability_equation(geometry, name):
     return delta_p
 
 def analyse_dataset(dataset, dataset2=None):
+    p_inlet_max = {}
     p_inlet = {}
-    p_inlet2 = {}
     p_max = {}
+    p_inlet_scale = {}
 
 
     p = dataset.lables["p"]
@@ -320,10 +321,13 @@ def analyse_dataset(dataset, dataset2=None):
         print(p.shape)
 
     else:
-        _, _, pow, min_val, max_val = dataset.bounds
+        a, b, pow, min_val, max_val = dataset.bounds
+        print(a, b, pow, min_val, max_val)
+        p_scale = np.array(p)
         p = entnormalize_new(p, pow, 0, 1)
-        #p = p - 1
-        p2 = dataset.lables["p"]
+        #p = np.divide(p, 150)
+
+        print(p.shape)
 
     if len(p.shape) == 5:
         skip = 4
@@ -334,90 +338,55 @@ def analyse_dataset(dataset, dataset2=None):
     for i in range(0, p.shape[0], skip):
         #name = dataset.names[i]
         result = p[i]
-        p_inlet[i] = result.max()
-        p_inlet2[i] = p2[i][0,4].mean()
-        p_max[i] = result.max()
+        p_inlet_max[i] = result.max()
+        p_inlet[i] = result[0,0:12].mean()
+        p_inlet_scale[i] = p_scale[i, 0, 0:12].mean()
 
     p_inlet = dict(sorted(p_inlet.items(), key=lambda item: item[1], reverse=True))
-    p_inlet2 = dict(sorted(p_inlet2.items(), key=lambda item: item[1], reverse=True))
-    p_max = dict(sorted(p_max.items(), key=lambda item: item[1], reverse=True))
-
-    print(p_inlet)
+    p_inlet_max = dict(sorted(p_inlet_max.items(), key=lambda item: item[1], reverse=True))
 
 
     # plot histogram
     pressure_values = list(p_inlet.values())
-    '''kde = stats.gaussian_kde(p_inlet_list)
-    x_range = np.linspace(min(p_inlet_list), max(p_inlet_list), 1000)
+    pressure_scale = list(p_inlet_scale.values())
 
-    plt.figure(figsize=(10, 6))
-    #plt.hist(p_inlet_list, bins=len(p_inlet_list), edgecolor='black')
-    plt.plot(x_range, kde(x_range), 'b-', label='Pressure Distribution')
-    plt.title('Distribution of Pressure Samples')
-    plt.xlabel('Pressure')
-    plt.ylabel('Density')
-    plt.savefig("histogram.png")'''
-
-    '''kde = stats.gaussian_kde(pressure_values)
-    x_range = np.linspace(min(pressure_values), max(pressure_values), 1000)
-    y_kde = kde(x_range)
-    plt.plot(x_range, y_kde, 'b-', label='Pressure Distribution')
-
-    plt.title('Distribution of Pressure Differnece Samples')
-    plt.xlabel('Pressure')
-    plt.ylabel('Density')
-
-    mean_pressure = np.mean(pressure_values)
-    plt.axvline(mean_pressure, color='r', linestyle='dashed', linewidth=2, label=f'Mean: {mean_pressure:.5f}')
-
-    plt.legend()
-    plt.savefig("histogram.png")'''
-
-    # plot p_inlets
-    x = list(p_inlet.keys())
-    x = range(len(p_inlet.keys()))
-    y = list(p_inlet.values())
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(x, y, color='blue', linewidth=3)
-
-    x = list(p_inlet2.keys())
-    x = range(len(p_inlet2.keys()))
-    y = list(p_inlet2.values())
-
-    plt.plot(x, y, color='orange', linewidth=3)
-
-    plt.xlabel('sample')
-    plt.ylabel('p_diff')
-
-    plt.savefig('p_inlets.png')
-
-    # plot p_maxes
-    '''x = list(p_max.keys())
-    y = list(p_max.values())
-
-    plt.figure(figsize=(20, 10))
-    plt.plot(x, y, color='blue', marker='x')
-
-    plt.xlabel('geometry')
-    plt.ylabel('p_max')
-
-    plt.savefig('p_maxes.png')'''
-
-    #p_inlet = dict(sorted(p_inlet.items(), key=lambda item: item[1], reverse=False))
-    #for p, name in p_inlet.items():
-        #print(name, ": ", p)
-
-
-    '''with open("p_inlets.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, p_inlet.keys())
-        w.writeheader()
-        w.writerow(p_inlet)
-
-    with open("p_maxes.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, p_max.keys())
-        w.writeheader()
-        w.writerow(p_max)'''
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Calculate mean and std for annotations
+    mean = np.mean(pressure_values)
+    std = np.std(pressure_values)
+    
+    # Create histogram
+    n, bins, patches = ax.hist(pressure_values, 
+                             bins='auto',  # automatically determine number of bins
+                             alpha=0.7,    # slight transparency
+                             color='blue')
+    
+    
+    # Add vertical line for mean
+    #ax.axvline(mean, color='red', linestyle='dashed', alpha=0.5)
+    
+    # Add text box with statistics
+    stats_text = f'Mean: {mean:.4f}\nStd Dev: {std:.4f}'
+    '''ax.text(0.95, 0.95, stats_text,
+            transform=ax.transAxes,
+            verticalalignment='top',
+            horizontalalignment='right',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))'''
+    
+    # Customize the plot
+    ax.set_title('Distribution of Pressure Values', fontsize=12, pad=15)
+    ax.set_xlabel('Pressure')
+    ax.set_ylabel('Number of Samples')
+    
+    # Add grid and legend
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Adjust layout
+    plt.tight_layout()
+    plt.savefig('histogram.png')
 
     return p_max
 

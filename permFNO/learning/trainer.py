@@ -148,7 +148,7 @@ class Trainer():
     def evaluate(self, verbose: bool = True):
         self.model.eval()
 
-        mean_loss_function = MARELoss
+        mean_loss_function = MAPELoss
 
         if verbose:
             individual_criterium = MaskedIndividualLoss(MaskedMAELoss())
@@ -191,6 +191,7 @@ class Trainer():
                         result = individual_criterium_mean(output_mean, target_mean, names)
                         individual_error_mean.update(result)
                     if batch == 0:
+                        print(names[0])
                         input_sample = inputs[0][0].cpu().numpy()
                         output_sample = outputs[0][0].cpu().numpy()
                         target_sample = targets[0][0].cpu().numpy()
@@ -207,7 +208,7 @@ class Trainer():
                 saveErrorPlot(outputs_mean, targets_mean, (self.folder + "/errors.png"))
                 #self.writer.add_graph(self.model)
 
-                mare = MARELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
+                mare = MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 mae = MAELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 r2 = R2Score()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 max_mae = -1.
@@ -216,11 +217,11 @@ class Trainer():
                     if error > max_mae:
                         max_mae = error
 
-                print("MAE:", mae, "MARE:", mare, "R2:", r2, "Max MAE:", max_mae)
+                print("MAE:", mae, "MAPE:", mare, "R2:", r2, "Max MAE:", max_mae)
             
 
 
-        return total_loss / len(self.test_loader.dataset), MARELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
+        return total_loss / len(self.test_loader.dataset), MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
     
 
     def printProgress(self, epoch, train_loss, val_loss, val_loss_in, epoch_duration):

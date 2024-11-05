@@ -89,11 +89,11 @@ class MAELoss(nn.Module):
         return error.mean()
 
 
-# MARE: Mean Absolute Relative Error
+# MARE: Mean Absolute Percentage Error
 
-class MaskedMARELoss(nn.Module):
+class MaskedMAPELoss(nn.Module):
     def __init__(self, epsilon=1e-8):
-        super(MaskedMARELoss, self).__init__()
+        super(MaskedMAPELoss, self).__init__()
         self.epsilon = epsilon
 
 
@@ -103,11 +103,11 @@ class MaskedMARELoss(nn.Module):
         squared_error = torch.abs(relative_error)
         masked_error = squared_error * mask
 
-        return masked_error.sum() / mask.sum()
+        return 100. * (masked_error.sum() / mask.sum())
 
-class MARELoss(nn.Module):
+class MAPELoss(nn.Module):
     def __init__(self, epsilon=1e-8):
-        super(MARELoss, self).__init__()
+        super(MAPELoss, self).__init__()
         self.epsilon = epsilon
 
 
@@ -116,7 +116,7 @@ class MARELoss(nn.Module):
         relative_error = (output - target) / (target + self.epsilon)
         squared_error = torch.abs(relative_error)
 
-        return squared_error.mean()
+        return squared_error.mean() * 100.
    
 
 # RMSRE: Root Mean Square Relative Error

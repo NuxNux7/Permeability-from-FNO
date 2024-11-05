@@ -130,21 +130,16 @@ if __name__ == "__main__":
 
     # Create the scatter plot
     plt.figure(figsize=(10, 6))
-    plt.scatter(given_values, calc_values)
+    plt.scatter(given_values, calc_values, c='crimson')
     
     # Add labels for each point
     #for i, name in enumerate(sample_names):
         #plt.annotate(name, (est_values[i], calc_values[i]), xytext=(5, 5), textcoords='offset points')
     
-    # Set labels and title
-    plt.xlabel('Given Value')
-    plt.ylabel('Calculated Value')
-    plt.title('Given vs Calculated Values')
-    
     # Add a diagonal line for reference
     min_val = min(min(given_values), min(calc_values))
     max_val = max(max(given_values), max(calc_values))
-    plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='y=x')
+    plt.plot([min_val, max_val], [min_val, max_val], 'b-', label='ideal')
     
     plt.legend()
     plt.grid(True)

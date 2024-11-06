@@ -45,6 +45,7 @@ def main(load_checkpoint: bool = False,
          criterion = MaskedMSELoss()):
     """
     The main entry point for the application.
+    Here, the learning process can be setup by choosing the model, training parameter and dataset.
 
     Features:
     - Supports loading a pre-trained model checkpoint for evaluation or continued training.

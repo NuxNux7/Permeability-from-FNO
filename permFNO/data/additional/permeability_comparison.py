@@ -1,3 +1,6 @@
+# This file is for comparing the simulated result of the 2D simulation with the given perm values
+# This is standaloan code!
+
 import os
 import numpy as np
 import csv
@@ -65,7 +68,7 @@ if __name__ == "__main__":
     factors = []
 
     # read in given permeabilities from file
-    path_permeabilities = '/home/vault/iwia/iwia057h/data/2D/permeability.csv'
+    path_permeabilities = '/data/2D/permeability.csv'
     given_perms = load_csv(path_permeabilities)
 
     # work with simulation data
@@ -74,7 +77,7 @@ if __name__ == "__main__":
     relative_differences = []
     samples = []
 
-    path_simulations = '/home/woody/iwia/iwia057h/2D/simulation/'
+    path_simulations = '/2D/simulation/'
     for file in os.listdir(path_simulations):
 
         # get sample number from filename

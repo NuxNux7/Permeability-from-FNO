@@ -1,3 +1,9 @@
+# Based on Nvidia Modulus Sym Siren functions
+# https://github.com/NVIDIA/modulus-sym/blob/main/modulus/sym/models/siren.py
+
+# Based on Siren functions from Sitzmann, Vincent, et al.
+# https://github.com/vsitzmann/siren
+
 from typing import List, Dict, Tuple, Optional
 
 import torch.nn as nn
@@ -12,9 +18,9 @@ class SirenArch(nn.Module):
     Parameters
     ----------
     in_features : int
-        TODO
+        Number of input channels
     out_features : int
-        TODO
+        Number of output channels
     layer_size : int, optional
         Layer size for every hidden layer of the model, by default 512
     nr_layers : int, optional

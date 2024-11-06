@@ -1,8 +1,18 @@
+# Functions used for normalization and their reversion
+# WARNING: Use with care! The old normalization is not used combined with a power transformation.
+#          This code is used costom to datasets and not universal!
+
 import numpy as np
 import torch
 import torch.nn as nn
 
 def normalize_old(grid, scale, offset, pow, verbose=False):
+    """
+    Legacy normalization function that applies scaling, offset, and power transformation
+    with optional clipping and verbose output.
+
+    Legacy means fixed scale!
+    """
 
     # normalization
     grid[:][:][:][:][:] = (grid[:][:][:][:][:] - offset) * scale
@@ -32,6 +42,12 @@ def normalize_old(grid, scale, offset, pow, verbose=False):
 
 
 def normalize_new(grid, pow, verbose=False):
+    """
+    Simplified normalization that first normalizes to [0,1] range
+    then applies power transformation.
+
+    New mean Min-Max normalization
+    """
 
     # normalization
     min_val = np.min(grid)
@@ -44,7 +60,12 @@ def normalize_new(grid, pow, verbose=False):
     return grid, min_val, max_val
 
 
-def entnormalize_new(grid, pow, min_val, max_val):
+def denormalize_new(grid, pow, min_val, max_val):
+    """
+    Inverse normalization function that undoes power transformation
+    and rescales back to original range.
+    """
+
     grid = np.clip(grid, 0, None)
     grid = np.power(grid, (1/pow))
 
@@ -53,9 +74,13 @@ def entnormalize_new(grid, pow, min_val, max_val):
     return grid
 
 
-class Entnormalizer(nn.Module):
+class Denormalizer(nn.Module):
+    """
+    PyTorch module for inverse normalization with configurable parameters.
+    Includes both old and new implementations.
+    """
     def __init__(self, offset=0, scale=1, pow=1, min_val=0, max_val=1):
-        super(Entnormalizer, self).__init__()
+        super(Denormalizer, self).__init__()
         self.offset = offset
         self.scale = scale
         self.pow = pow
@@ -64,6 +89,7 @@ class Entnormalizer(nn.Module):
 
 
     def forwardOld(self, grid):
+        """Legacy inverse normalization method"""
         if self.pow != 1:
             grid[:] = (grid[:] * (self.max_val - self.min_val)) + self.min_val
             grid = torch.clip(grid, 0, None)
@@ -75,6 +101,12 @@ class Entnormalizer(nn.Module):
     
     
     def forward(self, grid):
+        """
+        Simplified inverse normalization method focusing on
+        power transformation only.
+
+        Does not revert Min-Max scaling!
+        """
         grid = torch.clip(grid, 0, None)
         grid = torch.pow(grid, (1/self.pow))
 

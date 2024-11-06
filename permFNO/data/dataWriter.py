@@ -1,3 +1,7 @@
+# Functions for saving and visualizing data in various formats (PNG, VTK, CSV, H5PY) 
+# and creating comparison plots between predicted and target values.
+
+
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -9,6 +13,11 @@ import h5py
 
 
 def savePNG(input_data, output_data, target_data, mask, filename):
+    """
+    Creates and saves a figure with three subplots showing input data, output data,
+    and their masked difference. For 3D data, displays the middle slice.
+    Saves the resulting visualization as a PNG file.
+    """
     slice_index = input_data.shape[-1] // 2
 
     diff_data = mask * np.abs(output_data - target_data)
@@ -42,6 +51,12 @@ def savePNG(input_data, output_data, target_data, mask, filename):
 
 
 def saveDictToVTK(data_dict, filename):
+    """
+    Converts a dictionary of numpy arrays into a VTK structured points dataset.
+    Handles both 2D and 3D data, automatically expanding 2D data to 3D.
+    Saves the resulting dataset as a VTK file.
+    """
+        
      # Create vtkStructuredPoints
     data = vtk.vtkStructuredPoints()
     
@@ -71,6 +86,10 @@ def saveDictToVTK(data_dict, filename):
 
 
 def saveArraysToVTK(input_data, output_data, target_data, mask, filename):
+    """
+    Creates a VTK file containing input data, output data, target data, and their masked difference.
+    Serves as a convenience wrapper around saveDictToVTK for specific data types.
+    """
     diff_data = mask * np.abs(output_data - target_data)
 
     data_dict = {"input":       input_data,
@@ -82,7 +101,10 @@ def saveArraysToVTK(input_data, output_data, target_data, mask, filename):
 
 
 def saveCSV(dict, filename, first: bool = True):
-
+    """
+    Saves a dictionary of data to a CSV file with columns for Sample, MAE p, and MAPE p inlet.
+    Can either create a new file or append to an existing one based on the 'first' parameter.
+    """
     if first:
         mode = 'w'
     else:
@@ -91,12 +113,18 @@ def saveCSV(dict, filename, first: bool = True):
     with open(filename, mode, newline='') as csvfile:
         if first:
             writer = csv.writer(csvfile)
-        writer.writerow(['Sample', 'MAE p', 'MARE p inlet'])
+        writer.writerow(['Sample', 'MAE p', 'MAPE p inlet'])
         for key, values in dict.items():
             writer.writerow([key] + values)
 
 
 def saveH5PY(input_data, output_data, name_data, bounds, filename):
+    """
+    Saves multiple datasets to an HDF5 file with specific group structure.
+    Creates groups for input and output data, and datasets for names and bounds.
+    Handles ASCII encoding for name data and specific bounds format.
+    """
+        
     with h5py.File(filename, "w") as f:
         input = f.create_group("input")
         for key, value in input_data.items():
@@ -114,6 +142,11 @@ def saveH5PY(input_data, output_data, name_data, bounds, filename):
 
 
 def saveErrorPlot(outputs, targets, path):
+    """
+    Creates and saves a scatter plot comparing predicted outputs against target values.
+    Includes a diagonal line for perfect predictions and uses equal axis scaling.
+    Useful for visualizing model performance and prediction accuracy.
+    """
 
     plt.figure(figsize=(10,10))
     plt.scatter(targets, outputs, c='crimson')
@@ -131,6 +164,9 @@ def saveErrorPlot(outputs, targets, path):
 
 
 def visualize(input_data, output_data, target_data, mask, output_folder):
-
+    """
+    Convenience function that creates both PNG and VTK visualizations of the data.
+    Saves a 2D slice visualization as PNG and full 3D data as VTK file in the specified folder.
+    """
     savePNG(input_data, output_data, target_data, mask, f"{output_folder}/slice.png")
     saveArraysToVTK(input_data, output_data, target_data, mask, f"{output_folder}/sample.vtk")

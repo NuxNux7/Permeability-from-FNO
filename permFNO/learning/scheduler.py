@@ -4,7 +4,21 @@ from torch.optim.lr_scheduler import LambdaLR
 
 
 class CosineLRLambda:
-    def __init__(self, num_warmup_steps, num_training_steps, num_cycles, min_lambda):
+    """
+    Initializes the CosineLRLambda class.
+
+    Args:
+        num_warmup_steps (int): The number of warmup steps to use.
+        num_training_steps (int): The total number of training steps.
+        num_cycles (float): The number of cosine cycles to use.
+        min_lambda (float): The minimum percentage of the learning rate multiplier.
+    """
+    def __init__(self,
+                 num_warmup_steps,
+                 num_training_steps,
+                 num_cycles,
+                 min_lambda):
+        
         self.num_warmup_steps = num_warmup_steps
         self.num_training_steps = num_training_steps
         self.num_cycles = num_cycles
@@ -21,9 +35,28 @@ class CosineLRLambda:
 
 
 class CosineWithWarmupScheduler(LambdaLR):
-    def __init__(self, optimizer, num_warmup_steps: int,
-                 num_training_steps: int, min_lambda: float = 0, num_cycles: float = 0.5,
+    """
+    Initializes the CosineWithWarmupScheduler class.
+    The cosine scheduler is a learning rate scheduling technique that uses a cosine function to adjust the learning rate over the course of training.
+    It is often used in conjunction with a warmup period, where the learning rate starts low and gradually increases to the full learning rate.
+
+    Args:
+        optimizer (torch.optim.Optimizer): The optimizer to use with the scheduler.
+        num_warmup_steps (int): The number of warmup steps to use.
+        num_training_steps (int): The total number of training steps.
+        min_lambda (float, optional): The minimum percentage of the learning rate multiplier. Defaults to 0.
+        num_cycles (float, optional): The number of cosine cycles to use. Defaults to 0.5.
+        last_epoch (int, optional): The index of the last epoch. Defaults to -1.
+    """
+
+    def __init__(self,
+                 optimizer,
+                 num_warmup_steps: int,
+                 num_training_steps: int,
+                 min_lambda: float = 0,
+                 num_cycles: float = 0.5,
                  last_epoch=-1):
+        
         lr_lambda = CosineLRLambda(
             num_warmup_steps, num_training_steps, num_cycles, min_lambda)
         super().__init__(optimizer, lr_lambda, last_epoch)

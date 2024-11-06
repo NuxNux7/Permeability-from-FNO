@@ -1,3 +1,6 @@
+# This file is for reading in the geometry from the DRP dataset.
+# This is standaloan code!
+
 import os
 import h5py
 import scipy.io
@@ -21,7 +24,7 @@ def loadMatFile(path, entry):
         ValueError('could not open the file :(')
 
 #paths
-project_path = '/home/woody/iwia/iwia057h/external/srv/www/digrocks/portal/media/projects/372/'
+project_path = 'external/srv/www/digrocks/portal/media/projects/372/'
 origin_path = 'origin/'
 analysis_path = 'analysis'
 simulation_type = 'P_5_MPa' + '.mat'
@@ -85,5 +88,5 @@ def saveH5PY(input_data, output_data, name_data, filename):
         asciiList = [n.encode("ascii", "ignore") for n in name_data]
         f.create_dataset("name", data=asciiList)
 
-saveH5PY(inputs, outputs, names, '/home/woody/iwia/iwia057h/external/external2.hp5')
+saveH5PY(inputs, outputs, names, '/external/external2.hp5')
 

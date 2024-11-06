@@ -1,18 +1,5 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES.
-# SPDX-FileCopyrightText: All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Functions for reading in a folder of VTK files.
+# WARNING: Use with care! Many functions contain custom code for one dataset and are not universal!
 
 import os
 import math
@@ -26,13 +13,30 @@ from vtk.util.numpy_support import vtk_to_numpy
 
 from .normalization import *
 
-#from skfmm import distance
-
 
 
 # MAIN FUNCTION
-def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=False, masking=True, calc_p_in=False, dim=3, spheres=False):
-    "Loads a FNO dataset"
+def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=False, masking=True, dim=3, spheres=False):
+    """
+    Loads a dataset from a folder of vti files.
+    Please use this function only to create H5PY datasets.
+
+    Some datasets have their geometries separate from the simulation results,
+    thus a function needs to be provided to calculate the geometry path from the simulation file name.
+    
+    Args:
+        path (str): Path to the dataset.
+        path_geometry (str, optional): Path to the geometry data.
+        bounds (tuple, optional): Bounds for normalization.
+        rotate (bool, optional): Whether to rotate the dataset.
+        scaling (bool, optional): Whether to scale the dataset.
+        masking (bool, optional): Whether to create a mask.
+        dim (int, optional): Dimensionality of the dataset (2 or 3).
+        spheres (bool, optional): Whether the dataset contains spheres.
+    
+    Returns:
+        tuple: (invar, outvar, mask, names, bounds)
+    """
 
     spheres = True
 
@@ -56,12 +60,6 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
     invar = {"fill": np.empty(shape, dtype=np.float32)}
     outvar = {"p" : np.empty(shape, dtype=np.float32)}
 
-    if calc_p_in:
-        if dim == 3:
-            outvar["p_in"] = np.empty((size, 1, 1, 1, 1))
-        else:
-            outvar["p_in"] = np.empty((size, 1, 1, 1))
-
 
     # iterate every file in folder
     names = []
@@ -72,11 +70,10 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
             name = os.path.basename(file).split('_')
             sample = int(name[2])
         
-            #if sample < 2000:
-                #continue
-
-            #if counter >= size:
-                #continue
+            '''if sample < 2000:
+                continue
+            if counter >= size:
+                continue'''
 
         names.append(os.path.basename(file))
 
@@ -110,27 +107,20 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
                     invar["fill"][counter] = np.rot90(dict_geometry['NoSlip'], k=1, axes=(-2,-1))
                     outvar["p"][counter] = np.rot90(dict_simulation[density_key], k=1, axes=(-2,-1))
                 counter = counter + 1
-    print(len(names))
     
     # calculate mask for lambda weighting using fill
     if masking:
-        mask = create_mask(invar["fill"], calc_p_in)
+        mask = create_mask(invar["fill"])
     else:
         mask = None
 
 
-    # calculate signed distance field
-    '''if sdf:
-        invar["fill"] = create_sdf(mask["p"], invar["fill"], scaling)'''
-
-
-    # get bounds for normalization
-
+    # normalization
     if spheres:
         pow = 1
         scale = 1
         offset = 1
-        outvar["p"], min_pow, max_pow = normalize_old(outvar["p"], scale, offset, pow, True)    # changed from external:12 old: 135 (125)
+        outvar["p"], min_pow, max_pow = normalize_old(outvar["p"], scale, offset, pow, True)    # scale default: 150
     else:
         pow = 0.5
         scale = 1
@@ -139,85 +129,61 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
 
     invar["fill"], _, _ = normalize_new(invar["fill"], 1)
     bounds = [offset, scale, pow, min_pow, max_pow]
-    #bounds = [0, 1, 1, 0, 1]
-
-    # create p_in
-    if calc_p_in:
-        outvar["p_in"] = p_to_p_in(outvar["p"])
-
 
     return (invar, outvar, mask, np.array(names), bounds)
 
 
-def load_dataset_fast(path, self_rotate=False, masking=True):
-    "Loads a FNO dataset"
 
-    size = len(os.listdir(path))
-    shape = (size, 1, 128, 64, 64)
-
-    invar = {"fill": np.empty(shape, dtype=np.float32)}
-    outvar = {"p" : np.empty(shape, dtype=np.float32)}
-
-
-    # iterate every file in folder
-    counter = 0
-    names = []
-    for file in os.listdir(path):
-        names.append(os.path.basename(file))
-
-        dict = load_VTI(path + "/" + file, scaling=False, cells=False)
-        print("loaded file: ", (counter + 1), "/", size)
-
-
-        invar["fill"][counter] = dict["fill"]
-        outvar["p"][counter] = dict["p"]
-
-
-        if self_rotate:
-            for _ in range(3):
-
-                invar["fill"] = np.append(invar["fill"],
-                    np.rot90(dict["fill"], k=1, axes=(-2,-1)), axis=0)
-                outvar["p"] = np.append(outvar["p"],
-                    np.rot90(dict["p"], k=1, axes=(-2,-1)), axis=0)
-
-        counter = counter + 1
-            
-
-    # calculate mask for lambda weighting using fill
-    if masking:
-        mask = create_mask(invar["fill"], False)
-    else:
-        mask = None
-
-    return (invar, outvar, mask, np.array(names), (0, 1, 1, 0, 1))
-
-
+# HELPER FUNCTIONS
 def apped_to_dict(dict, invar, outvar):
+    """
+    Appends data to the input and output dictionaries.
+    
+    Args:
+        dict (dict): Dictionary containing data to be appended.
+        invar (dict): Input dictionary.
+        outvar (dict): Output dictionary.
+    
+    Returns:
+        tuple: (invar, outvar)
+    """
+
     invar["fill"] = np.append(invar["fill"], dict["OverlapFraction"], axis=0)
     outvar["p"] = np.append(outvar["p"], dict["Density"], axis=0)
 
     return (invar, outvar)
 
 
-
-# GRID TRANSFORMATIONS
 def scale_grid(grid, shape):
+    """
+    Scales the input grid to the specified shape with anti-aliasing.
+    
+    Args:
+        grid (numpy.ndarray): Input grid.
+        shape (tuple): Target shape.
+    
+    Returns:
+        numpy.ndarray: Scaled grid.
+    """
     new_shape = (grid.shape[0], grid.shape[1], *shape)
     new_grid = resize(grid, new_shape, anti_aliasing=True, preserve_range=True)
 
     return new_grid
 
 
-
-
-# GRID CREATION
-def create_mask(fill, calc_p_in):
+def create_mask(fill):
+    """
+    Creates a mask based on the input 'fill' data.
+    The first 12 layers are highlighted, the rest is in range [0.1,0.9] dependent on fluid domain.
+    
+    Args:
+        fill (numpy.ndarray): Input 'fill' data.
+    
+    Returns:
+        dict: Mask dictionary.
+    """
 
     mask = {"p": np.empty(fill.shape, dtype=np.float32)}
-
-    if calc_p_in:
-        mask["p_in"] = np.ones((fill.shape[0], 1, 1, 1, 1))
 
     mask["p"] = (1. - fill[:]) * 0.8 + 0.1
 
@@ -227,45 +193,22 @@ def create_mask(fill, calc_p_in):
     return mask
 
 
-'''def create_sdf(mask, fill, scaling):
-
-    sdf = np.empty_like(mask)
-
-    for b in range(mask.shape[0]):
-        # Compute the distance from the boundary
-        distance_mask = distance(mask[b], dx=1.0)
-        distance_fill = distance(fill[b], dx=1.0)
-
-
-        # Create the signed distance field
-        sdf[b] = distance_mask
-        sdf[b][fill[b] > 0.5] = -distance_fill[fill[b] > 0.5]
-
-        if scaling:
-            sdf[b] = np.clip(sdf[b], -9, 9)
-            sdf[b] = 1/9 * sdf[b]
-        else:
-            sdf[b] = np.clip(sdf[b], -18, 18)
-            sdf[b] = 1/18 * sdf[b]
-
-    return sdf'''
-
-
-def p_to_p_in(p):
-
-    p_in = np.empty_like(p)
-
-    shape = (1, 1, 1, 1)
-    for i in range(p.shape[0]):
-        value = p[i][0][1].mean()
-        p_in[i] = np.reshape(value, (1, 1, 1, 1))
-
-    return p_in
-
-
 
 # IO
 def load_VTI(path, scaling, cells=True, swapZX=False, shape=(96, 64, 64)):
+    """
+    Loads a VTI file and returns a dictionary of the data.
+    
+    Args:
+        path (str): Path to the VTI file.
+        scaling (bool): Whether to scale the data.
+        cells (bool, optional): Whether to use cell data or point data.
+        swapZX (bool, optional): Whether to swap the Z and X axes.
+        shape (tuple, optional): Target shape for the data.
+    
+    Returns:
+        dict: Dictionary of the loaded data.
+    """
 
     if not path.endswith(".vti"):
         raise Exception(
@@ -322,7 +265,16 @@ def load_VTI(path, scaling, cells=True, swapZX=False, shape=(96, 64, 64)):
 
 
 def get_geometry_path(filename, dim):
-
+    """
+    Retrieves the path of the geometry VTI file from the simulation result file name.
+    
+    Args:
+        filename (str): Name of the simulation result file.
+        dim (int): Dimensionality of the dataset (2 or 3).
+    
+    Returns:
+        tuple: (geometry_name, density_name)
+    """
     name = filename.split('_')
 
     if dim == 3:

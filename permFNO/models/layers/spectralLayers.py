@@ -1,4 +1,11 @@
-# Copy of Nvidia Modulus layers + FFNO addition
+# Based on Nvidia Modulus spectral layers
+# https://github.com/NVIDIA/modulus/blob/main/modulus/models/layers/spectral_layers.py
+
+# Based on the FNO papers GitHub from Zongyi Li and Daniel Zhengyu Huang
+# https://github.com/neuraloperator/neuraloperator/blob/main/neuralop/models/fno.py
+
+# Based on the FFNO papers GitHub from Alasdair Tran, Alexander Mathews, Lexing Xie and Cheng Soon Ong
+# https://github.com/alasdairtran/fourierflow/blob/main/fourierflow/modules/factorized_fno/mesh_3d.py
 
 
 from typing import List, Tuple
@@ -10,8 +17,6 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from opt_einsum import contract
-
-import time
 
 
 class SpectralConv1d(nn.Module):
@@ -296,11 +301,11 @@ class SpectralConv3d(nn.Module):
 
 
 # ==========================================
-# Functional Spectral Convolution NEW!
+# Factorized Spectral Convolution NEW!
 # ==========================================
 
 
-class FunctionalSpectralConv2d(nn.Module):
+class FactorizedSpectralConv2d(nn.Module):
     """Functional 2D Fourier layer. It does FFT for each direction, linear transform, addition and Inverse FFT.
 
     Parameters
@@ -434,7 +439,7 @@ class FunctionalSpectralConv2d(nn.Module):
             nn.init.xavier_normal_(weight)
 
 
-class FunctionalSpectralConv3d(nn.Module):
+class FactorizedSpectralConv3d(nn.Module):
     """Functional 3D Fourier layer. It does FFT for each direction, linear transform, addition and Inverse FFT.
 
     Parameters

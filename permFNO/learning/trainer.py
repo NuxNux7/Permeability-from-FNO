@@ -7,19 +7,38 @@ from torch.amp import autocast, GradScaler
 import time
 from tabulate import tabulate
 
-'''import sys
-from pathlib import Path
-
-project_root = Path(__file__).resolve().parent.parent.parent
-print(project_root)
-sys.path.append(str(project_root))'''
-
 from permFNO.data.dataWriter import visualize, saveCSV, saveErrorPlot
-from permFNO.data.normalization import Entnormalizer
+from permFNO.data.normalization import Denormalizer
 from .loss import *
 
 
 class Trainer():
+    """
+    A PyTorch Trainer class that handles the training and evaluation of a model.
+
+    Features:
+    - Accouts for the additional spatial inlet loss in the evaluation process.
+    - Supports training with mixed precision (FP16) using PyTorch's Automatic Mixed Precision (AMP) library.
+    - Implements gradient accumulation to reduce GPU memory usage.
+    - Allows for the use of a normalization reversion (denormalizer).
+    - Provides training and evaluation loops, saving checkpoints, and logging metrics to TensorBoard.
+    
+
+    Args:
+        model (torch.nn.Module): The PyTorch model to be trained.
+        train_loader (torch.utils.data.DataLoader): The DataLoader for the training data.
+        test_loader (torch.utils.data.DataLoader): The DataLoader for the test/validation data.
+        optimizer (torch.optim.Optimizer): The optimizer used for training the model.
+        scheduler (torch.optim.lr_scheduler._LRScheduler): The learning rate scheduler used during training.
+        criterion (torch.nn.Module): The loss function used for training the model.
+        epochs (int): The number of training epochs.
+        folder (str): The folder path to save the training artifacts (checkpoints, logs, etc.).
+        device (torch.device): The device (CPU or GPU) to use for training and evaluation.
+        amp (bool, optional): Whether to use Automatic Mixed Precision (AMP) for training. Defaults to False.
+        gradient_accumulation (int, optional): The number of gradients to accumulate before updating the model's weights. Defaults to 1.
+        denorm (denormalizer, optional): A custom ent-normalization technique. Defaults to None.
+    """
+
     def __init__(self,
                  model,
                  train_loader, test_loader,
@@ -27,21 +46,18 @@ class Trainer():
                  epochs,
                  folder, device,
                  amp: bool = False, 
-                 gradient_accumulation: int = 4,
-                 entnorm=Entnormalizer()):
+                 gradient_accumulation: int = 1,
+                 denorm=Denormalizer()):
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.optimizer = optimizer
         self.scheduler = scheduler
-        if not isinstance(criterion, list):
-            self.criterion = [(1., criterion)]
-        else:
-            self.criterion = criterion
+        self.criterion = criterion
         self.epochs = epochs
         self.folder = folder
         self.device = device
-        self.entnorm = entnorm
+        self.denorm = denorm
 
         self.amp = amp
         self.gradient_accumulation = gradient_accumulation
@@ -55,6 +71,7 @@ class Trainer():
         )
 
         self.writer = SummaryWriter(log_dir=folder)
+
 
 
     def trainRun(self, epoch: int = 0):
@@ -71,23 +88,20 @@ class Trainer():
                           train_loss, val_loss, val_loss_in,
                           epoch_duration)
 
-            # Save network
+            # Save the model checkpoint
             if (((epoch + 1) % 10) == 0) or (epoch == (self.epochs - 1)):
-                torch.save({
-                'epoch': epoch,
-                'model_state_dict': self.model.state_dict(),
-                'optimizer_state_dict': self.optimizer.state_dict(),
-                'scheduler': self.scheduler.state_dict(),
-                }, (self.folder + "/checkpoint.pth"))
-                print("Saved model!")
+                self.saveCheckpoint(epoch)
 
         self.writer.flush()
 
 
+
+    # Evaluate the model on the validation set
     def evaluateRun(self):
         val_loss, val_loss_in = self.evaluate(True)
         print(f"Val Loss General: {val_loss}, "
               f"Val Loss Inlet: {val_loss_in}")
+
 
 
     # Training function
@@ -104,24 +118,8 @@ class Trainer():
             with autocast("cuda", enabled=self.amp):
                 outputs = self.model(inputs)
 
-                # loss of preassure filed with set criterion
-                outputs_entnorm = self.entnorm(outputs)
-                targets_entnorm = self.entnorm(targets)
-                
-                crit, factor = self.criterion[0]
-                loss = factor * crit(outputs, targets, mask)
-
-                # loss of preassure at inlet at non normalized datapoints
-                if len(self.criterion) > 1:
-                    crit, factor = self.criterion[1]
-
-                    output_mean = outputs_entnorm[:, 0, 2].mean(dim=(-2, -1))
-                    target_mean = targets_entnorm[:, 0, 2].mean(dim=(-2, -1))
-
-                    inlet_loss = factor * crit(output_mean, target_mean)
-
-                    loss += torch.clip(inlet_loss, 0, 1)
-
+                # loss of preassure filed with set criterion              
+                loss = self.criterion(outputs, targets, mask)
                 loss = loss / self.gradient_accumulation
 
             self.scaler.scale(loss).backward()
@@ -148,8 +146,6 @@ class Trainer():
     def evaluate(self, verbose: bool = True):
         self.model.eval()
 
-        mean_loss_function = MAPELoss
-
         if verbose:
             individual_criterium = MaskedIndividualLoss(MaskedMAELoss())
             individual_criterium_mean = IndividualLoss(MAELoss())
@@ -169,15 +165,15 @@ class Trainer():
                     outputs = self.model(inputs)
 
                     # reverse power normalization
-                    outputs = self.entnorm(outputs)
-                    targets = self.entnorm(targets) #0., 1., 0.3, 0., 0.9215659
+                    outputs = self.denorm(outputs)
+                    targets = self.denorm(targets)
 
-                    total_loss += self.criterion[0][0](outputs, targets, masks).item() * outputs.shape[0]
+                    total_loss += self.criterion(outputs, targets, masks).item() * outputs.shape[0]
 
                     #calculate inlet loss
                     if len(outputs.shape) == 5:
-                        output_mean = outputs[:, 0, 0:12].mean(dim=(-3, -2, -1))       #TESTING 0:12
-                        target_mean = targets[:, 0, 0:12].mean(dim=(-3, -2, -1))       #TESTING 0:12
+                        output_mean = outputs[:, 0, 0:12].mean(dim=(-3, -2, -1))
+                        target_mean = targets[:, 0, 0:12].mean(dim=(-3, -2, -1))
                     else:
                         output_mean = outputs[:, 0, 0:12].mean(dim=(-2, -1))
                         target_mean = targets[:, 0, 0:12].mean(dim=(-2, -1))
@@ -191,39 +187,37 @@ class Trainer():
                         result = individual_criterium_mean(output_mean, target_mean, names)
                         individual_error_mean.update(result)
                     if batch == 0:
-                        print(names[0])
                         input_sample = inputs[0][0].cpu().numpy()
                         output_sample = outputs[0][0].cpu().numpy()
                         target_sample = targets[0][0].cpu().numpy()
                         mask_sample = masks[0][0].cpu().numpy()
                         self.writer.add_graph(self.model, torch.unsqueeze(inputs[0], 0))
-                        visualize(input_sample, output_sample, target_sample, mask_sample, self.folder)
 
             # print result
             if verbose:
                 visualize(input_sample, output_sample, target_sample, mask_sample, self.folder)
                 individual_error = {key: [individual_error[key], individual_error_mean[key]] for key in individual_error}
-                #print("max error mean: ", torch.tensor(individual_error_mean.values()).max())
                 saveCSV(individual_error, (self.folder + "/errors.csv"))
                 saveErrorPlot(outputs_mean, targets_mean, (self.folder + "/errors.png"))
-                #self.writer.add_graph(self.model)
 
-                mare = MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
+                mape = MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 mae = MAELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 r2 = R2Score()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 max_mae = -1.
-                for k, v in individual_error_mean.items():
+                for _, v in individual_error_mean.items():
                     error = float(v)
                     if error > max_mae:
                         max_mae = error
 
-                print("MAE:", mae, "MAPE:", mare, "R2:", r2, "Max MAE:", max_mae)
+                print("MAE:", mae, "MAPE:", mape, "R2:", r2, "Max MAE:", max_mae)
             
 
 
         return total_loss / len(self.test_loader.dataset), MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
     
 
+
+    # Print the training progress
     def printProgress(self, epoch, train_loss, val_loss, val_loss_in, epoch_duration):
         # Prepare the data
         headers = ["Epoch", "Train Loss", "Val Loss", "Val Loss In", "LR", "Batch Time"]
@@ -247,3 +241,16 @@ class Trainer():
         self.writer.add_scalar("Validation/test_p", val_loss, epoch)
         self.writer.add_scalar("Validation/test_p_in", val_loss_in, epoch)
         self.writer.add_scalar("Training/leatningRate", self.scheduler.get_last_lr()[0], epoch)
+
+
+
+    # Save the model checkpoint
+    def saveCheckpoint(self, epoch):
+        # Save the model checkpoint
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict(),
+        }, (self.folder + "/checkpoint.pth"))
+        print("Saved model!")

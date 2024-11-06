@@ -1,4 +1,8 @@
-# Copy of Nvidia Modulus layers
+# Copy on Nvidia Modulus Sym Siren functions
+# https://github.com/NVIDIA/modulus-sym/blob/main/modulus/sym/models/siren.py
+
+# Based on Siren functions from Sitzmann, Vincent, et al.
+# https://github.com/vsitzmann/siren
 
 import enum
 import math

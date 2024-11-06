@@ -1,9 +1,33 @@
+# Based on the FFNO papers GitHub from Alasdair Tran, Alexander Mathews, Lexing Xie and Cheng Soon Ong
+# https://github.com/alasdairtran/fourierflow/blob/main/fourierflow/modules/feedforward.py
+
 import torch
 import torch.nn as nn
 from torch.nn.utils.parametrizations import weight_norm
 
 
 class FeedForwardBlock(nn.Module):
+    """
+    A feed-forward neural network block with configurable parameters.
+
+    This block can be used as a building block for more complex neural network architectures.
+    It allows for customization of the dimensionality, channel size, activation function,
+    normalization, and dropout.
+
+    Args:
+        dims (int): The dimensionality of the input tensor (1, 2, or 3).
+        fno_layer_size (int, optional): The size of the internal layers in the feed-forward block. Default is 32.
+        activation_fn (nn.Module, optional): The activation function to be used in the block. Default is nn.GELU().
+        use_weight_norm (bool, optional): Whether to enable weight normalization. Default is False.
+        batch_norm (bool, optional): Whether to enable batch normalization. Default is False.
+        dropout (float, optional): The dropout rate to be applied. Default is 0.0.
+        num_blocks (int, optional): The number of feed-forward blocks to stack. Default is 1.
+        factor (int, optional): A factor to adjust the channel size of the internal layers. Default is 1.
+
+    Raises:
+        ValueError: If the `dims` parameter is not 1, 2, or 3.
+    """
+        
     def __init__(self,
                  dims: int,
                  fno_layer_size: int = 32,

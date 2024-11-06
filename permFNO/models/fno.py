@@ -1,3 +1,11 @@
+# Based on Nvidia Modulus FNO functions
+# https://github.com/NVIDIA/modulus/blob/main/modulus/models/fno/fno.py
+
+# Based on the FNO papers GitHub from Zongyi Li and Daniel Zhengyu Huang
+# https://github.com/neuraloperator/neuraloperator/blob/main/neuralop/models/fno.py
+
+# Based on the FFNO papers GitHub from Alasdair Tran, Alexander Mathews, Lexing Xie and Cheng Soon Ong
+# https://github.com/alasdairtran/fourierflow/blob/main/fourierflow/modules/factorized_fno/mesh_3d.py
 
 from typing import Dict, List, Union
 
@@ -13,7 +21,6 @@ import logging
 from .siren import SirenArch
 from .feedForward import FeedForwardBlock
 
-#from ..layers.convFC import *
 from .layers.spectralLayers import *
 
 
@@ -224,11 +231,11 @@ class FNO3DEncoder(nn.Module):
 
 # ===================================================================
 # ===================================================================
-# 2D/3D Functional FNO NEW!
+# 2D/3D Factorized FNO NEW!
 # ===================================================================
 # ===================================================================
 
-class FunctionalFNO2DEncoder(nn.Module):
+class FactorizedFNO2DEncoder(nn.Module):
     def __init__(
         self,
         in_channels: int = 1,
@@ -290,10 +297,10 @@ class FunctionalFNO2DEncoder(nn.Module):
             self.weights = None
 
 
-        # Build Functional Neural Fourier Operators
+        # Build Factorized Neural Fourier Operators
         for k in range(self.nr_fno_layers):
             self.spconv_layers.append(
-                FunctionalSpectralConv2d(
+                FactorizedSpectralConv2d(
                     self.fno_width,
                     self.fno_width,
                     fno_modes[0],
@@ -363,7 +370,7 @@ class FunctionalFNO2DEncoder(nn.Module):
         return torch.cat((grid_x, grid_y), dim=1)
 
 
-class FunctionalFNO3DEncoder(nn.Module):
+class FactorizedFNO3DEncoder(nn.Module):
     def __init__(
         self,
         in_channels: int = 1,
@@ -425,10 +432,10 @@ class FunctionalFNO3DEncoder(nn.Module):
             self.weights = None
 
 
-        # Build Functional Neural Fourier Operators
+        # Build Factorized Neural Fourier Operators
         for k in range(self.nr_fno_layers):
             self.spconv_layers.append(
-                FunctionalSpectralConv3d(
+                FactorizedSpectralConv3d(
                     self.fno_width,
                     self.fno_width,
                     fno_modes[0],
@@ -561,7 +568,7 @@ class FNOArch(nn.Module):
         Activation function, by default Activation.GELU
     coord_features : bool, optional
         Use coordinate meshgrid as additional input feature, by default True
-    functional: bool, optional
+    factorized: bool, optional
         Use a residual, feed-forward setup coupled with dinstinc fft for each dimension, by default False
     weight_sharing: bool, optional
         Use the same weights in every fourier layer. Usefull for deep F-FNO nets, by default False
@@ -621,7 +628,7 @@ class FNOArch(nn.Module):
         padding_type: str = "constant",
         decoder_net: nn.Module = SirenArch(32, 1, 32, 2),
         coord_features: bool = True,
-        functional: bool = False,
+        factorized: bool = False,
         weight_norm: bool = False,
         weight_sharing: bool = False,
         batch_norm: bool = False,
@@ -643,7 +650,7 @@ class FNOArch(nn.Module):
         self.decoder_net = decoder_net
 
         # F-FNO
-        self.functional = functional
+        self.factorized = factorized
         self.weight_sharing = weight_sharing
         self.batch_norm = batch_norm
         self.dropout = dropout
@@ -651,13 +658,13 @@ class FNOArch(nn.Module):
         in_channels = 1
         self.fno_layer_size = 32
 
-        if self.functional:
+        if self.factorized:
             if self.dimension == 3:
-                FNOModel = FunctionalFNO3DEncoder
+                FNOModel = FactorizedFNO3DEncoder
                 self.grid_to_points = grid_to_points3d  # For JIT
                 self.points_to_grid = points_to_grid3d  # For JIT
             elif self.dimension == 2:
-                FNOModel = FunctionalFNO2DEncoder
+                FNOModel = FactorizedFNO2DEncoder
                 self.grid_to_points = grid_to_points2d  # For JIT
                 self.points_to_grid = points_to_grid2d  # For JIT
             else:

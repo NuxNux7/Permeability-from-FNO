@@ -7,7 +7,7 @@ Structure
 --------------
 
 - data:          Handles the datasets, I/O and transformations
-- models:        Contain the FNO and FFNO together with its sub-parts
+- models:        Contains the FNO and FFNO together with its sub-parts
 - learning:      Methods needed for neural network training
 - main.py        The main function is used for setup and running the training process
 

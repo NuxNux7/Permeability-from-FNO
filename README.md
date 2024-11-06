@@ -1,16 +1,15 @@
 Estimating the Permeability of Porous Media with Fourier Neural Operators
+============
 Master Thesis Code by Lukas Schröder
 ==============
 
 Structure
 --------------
 
-- data:         Handles the datasets, I/O and transformations
-- models:       This sections contain the FNO and FFNO together with its sub-parts
-    - feedForward.py
-    - fno.py
-    - siren.py
-- main.py       The main function is used for setup and running the training process
+- data:          Handles the datasets, I/O and transformations
+- models:        Contain the FNO and FFNO together with its sub-parts
+- learning:      Methods needed for neural network training
+- main.py        The main function is used for setup and running the training process
 
 
 Abstract

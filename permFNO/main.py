@@ -4,9 +4,6 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import os
-import time
-
-from enum import Enum
 
 from learning.scheduler import CosineWithWarmupScheduler
 from learning.loss import *

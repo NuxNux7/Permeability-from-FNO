@@ -11,12 +11,16 @@ This work introduces and investigates a surrogate model for predicting the perme
 Structure
 --------------
 
-- data:          Handles the datasets, I/O and transformations
-- models:        Contains the FNO and FFNO together with its sub-parts
-- learning:      Methods needed for neural network training
-- main.py        The main function is used for setup and running the training process
+- permFNO:       Python package for the Fourier neural operator permeability prediction
+    - data:          Handles the datasets, I/O and transformations
+    - models:        Contains the FNO and FFNO together with its sub-parts
+    - learning:      Methods needed for neural network training
+    - main.py:       The main function is used for setup and running the training process
 
-- lbmpy:         Code used for LBM simulation
+- lbmpy:         Code used for LBM simulation with the package lbmpy
+    - LBM2D.py: Code for simulating the 2D geometries
+    - LBM3D.py: Code for simulating the 3D geometries
+    - permeability_comparison.py: Comparison method for given and calculated values
 
 
 Work

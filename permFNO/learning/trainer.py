@@ -44,7 +44,7 @@ class Trainer():
                  train_loader, test_loader,
                  optimizer, scheduler, criterion,
                  epochs,
-                 folder, device,
+                 folder, device, rank,
                  amp: bool = False, 
                  gradient_accumulation: int = 1,
                  denorm=Denormalizer()):
@@ -57,6 +57,7 @@ class Trainer():
         self.epochs = epochs
         self.folder = folder
         self.device = device
+        self.rank = rank
         self.denorm = denorm
 
         self.amp = amp
@@ -76,6 +77,9 @@ class Trainer():
 
     def trainRun(self, epoch: int = 0):
         for epoch in range(epoch, self.epochs):
+            self.train_loader.sampler.set_epoch(epoch)
+            self.test_loader.sampler.set_epoch(epoch)
+
             epoch_start_time = time.time()
 
             train_loss = self.train()
@@ -84,9 +88,10 @@ class Trainer():
             epoch_end_time = time.time()
             epoch_duration = epoch_end_time - epoch_start_time
 
-            self.printProgress(epoch,
-                          train_loss, val_loss, val_loss_in,
-                          epoch_duration)
+            if self.rank == 0:
+                self.printProgress(epoch,
+                              train_loss, val_loss, val_loss_in,
+                              epoch_duration)
 
             # Save the model checkpoint
             if (((epoch + 1) % 10) == 0) or (epoch == (self.epochs - 1)):
@@ -194,7 +199,7 @@ class Trainer():
                         self.writer.add_graph(self.model, torch.unsqueeze(inputs[0], 0))
 
             # print result
-            if verbose:
+            if verbose and (self.rank == 0):
                 visualize(input_sample, output_sample, target_sample, mask_sample, self.folder)
                 individual_error = {key: [individual_error[key], individual_error_mean[key]] for key in individual_error}
                 saveCSV(individual_error, (self.folder + "/errors.csv"))
@@ -249,7 +254,7 @@ class Trainer():
         # Save the model checkpoint
         torch.save({
             'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
+            'model_state_dict': self.model.module.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict(),
         }, (self.folder + "/checkpoint.pth"))

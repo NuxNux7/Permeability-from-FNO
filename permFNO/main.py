@@ -3,6 +3,10 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 import os
 
 from learning.scheduler import CosineWithWarmupScheduler
@@ -68,7 +72,8 @@ def main(load_checkpoint: bool = False,
     """
     
     # Set device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    rank, world_size = setup_ddp()
+    device = torch.device(f'cuda:{rank}')
 
     # Setup folder
     if name == None:
@@ -103,8 +108,17 @@ def main(load_checkpoint: bool = False,
     
     bounds = train_dataset.getBounds()
     denormalizer = Denormalizer(0, 1, bounds[2], 0, 1)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4)
+    train_loader = DataLoader(train_dataset,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              num_workers=4,
+                             sampler=DistributedSampler(train_dataset, num_replicas=world_size, rank=rank),
+                             pin_memory=True))
+    test_loader = DataLoader(test_dataset,
+                             batch_size=batch_size,
+                             num_workers=4,
+                             sampler=DistributedSampler(test_dataset, num_replicas=world_size, rank=rank),
+                             pin_memory=True)
     
 
     
@@ -138,6 +152,7 @@ def main(load_checkpoint: bool = False,
         batch_norm=False,
         dropout=False,
     ).to(device)
+    model = DDP(model, device_ids=[rank])
 
 
     # Print model parameters
@@ -170,7 +185,7 @@ def main(load_checkpoint: bool = False,
                       train_loader, test_loader,
                       optimizer, scheduler, criterion,
                       epochs, folder,
-                      device,
+                      device, rank,
                       False, gradient_accumulation,
                       denormalizer)
     
@@ -195,6 +210,22 @@ def name_from_settings( experiment: int = 0,
         name += "_" + number
 
     return name
+
+
+
+def setup_ddp():
+    rank = int(os.environ.get("SLURM_PROCID", 0))
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    
+    dist.init_process_group(
+        backend="nccl",
+        world_size=world_size,
+        rank=rank
+    )
+    
+    return rank, world_size
+
+
 
 
 

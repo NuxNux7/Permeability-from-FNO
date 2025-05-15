@@ -75,7 +75,7 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
             if counter >= size:
                 continue'''
 
-        names.append(os.path.basename(file))
+        names.append(os.path.basename(file) + str(0))
 
 
         if not file.endswith('.vti'):
@@ -99,7 +99,7 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
 
         # rotate for increased dataset
         if rotate:
-            for _ in range(3):
+            for i in range(3):
                 if spheres:
                     invar["fill"][counter] = np.rot90(dict_simulation["OverlapFraction"], k=1, axes=(-2,-1))
                     outvar["p"][counter] = np.rot90(dict_simulation["Density"], k=1, axes=(-2,-1))
@@ -107,6 +107,8 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
                     invar["fill"][counter] = np.rot90(dict_geometry['NoSlip'], k=1, axes=(-2,-1))
                     outvar["p"][counter] = np.rot90(dict_simulation[density_key], k=1, axes=(-2,-1))
                 counter = counter + 1
+                names.append(os.path.basename(file) + str(i))
+
     
     # calculate mask for lambda weighting using fill
     if masking:
@@ -118,7 +120,7 @@ def load_dataset(path, path_geometry=None, bounds=None, rotate=False, scaling=Fa
     # normalization
     if spheres:
         pow = 1
-        scale = 1
+        scale = 150
         offset = 1
         outvar["p"], min_pow, max_pow = normalize_old(outvar["p"], scale, offset, pow, True)    # scale default: 150
     else:
@@ -322,30 +324,17 @@ if __name__ == "__main__":
     import h5py
     import numpy as np
 
-    rotate = False
+    rotate = True
 
     invar, outvar, _, names, bounds = load_dataset(
-        "/home/woody/iwia/iwia057h/external/ownSimulation/simulation",
-        "/home/woody/iwia/iwia057h/external/ownSimulation/geometries",
-        rotate=rotate, scaling=True, masking=False, calc_p_in=False,
+        "/home/vault/unrz/unrz109h/porous_media_data/spheres/simulation_files/validation/shifted",
+        None,
+        rotate=rotate, scaling=True, masking=False,
         dim=3,
-        spheres=False
+        spheres=True
     )
 
-    # change names with rotation
-    new_names = []
-    if rotate:
-        for pos, name in enumerate(names):
-            new_names.append(name + "0")
-            new_names.append(name + "1")
-            new_names.append(name + "2")
-            new_names.append(name + "3")
-    else:
-        new_names = names
-
-    res = np.array(new_names)
-
-    saveH5PY(invar, outvar, res, bounds, "/home/woody/iwia/iwia057h/external/new.h5")
+    saveH5PY(invar, outvar, names, bounds, "/home/vault/unrz/unrz109h/porous_media_data/spheres/h5_datasets/std_validation.h5")
 
     '''file = h5py.File("/home/woody/iwia/iwia057h/external/spheres/unnorm_validation_new.h5", 'r')
     outputs = {}

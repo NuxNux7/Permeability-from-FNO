@@ -148,6 +148,7 @@ class SpectralConv2d(nn.Module):
         """
         # (batch, in_channel, x, y), (in_channel, out_channel, x, y) -> (batch, out_channel, x, y)
         cweights = torch.view_as_complex(weights)
+        #cweights = weights
         return torch.einsum("bixy,ioxy->boxy", input, cweights)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -257,6 +258,7 @@ class SpectralConv3d(nn.Module):
         """
         # (batch, in_channel, x, y, z), (in_channel, out_channel, x, y, z) -> (batch, out_channel, x, y, z)
         cweights = torch.view_as_complex(weights)
+        # = weights
         return torch.einsum("bixyz,ioxyz->boxyz", input, cweights)
 
     def forward(self, x: Tensor) -> Tensor:

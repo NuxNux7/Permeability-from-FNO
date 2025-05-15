@@ -29,7 +29,7 @@ EXTERNAL = 1
 IMAGES = 2
 
 DATSET_NAMES = ("spheres", "DRP", "2D")
-DATASET_VERSIONS = (("std"),
+DATASET_VERSIONS = (("std", "unnorm"),
                     ("std", "filtered_90"),
                     ("std", "full", "full_filtered_99", "noise", "rocks"))
 
@@ -74,6 +74,8 @@ def main(load_checkpoint: bool = False,
     # Set device
     rank, world_size = setup_ddp()
     device = torch.device(f'cuda:{rank}')
+    #device = torch.device(f'cuda')
+
 
     # Setup folder
     if name == None:
@@ -85,17 +87,17 @@ def main(load_checkpoint: bool = False,
             return
     else:
         os.makedirs(folder, exist_ok=True)
-    
+
 
 
     # Create data loaders
-    dataset_path = os.getcwd() + "/datasets/" + DATSET_NAMES[experiment] + "/" + DATASET_VERSIONS[experiment][version]
+    dataset_path = "/home/vault/unrz/unrz109h/porous_media_data/" + DATSET_NAMES[experiment] + "/h5_datasets/" + DATASET_VERSIONS[experiment][version]
     if evaluation:
-        test_dataset = DictDataset(dataset_path + "_test.h5", h5=True, masking=True)
+        test_dataset = DictDataset(dataset_path + "_validation.h5", h5=True, masking=True)
         print("Validation dataset loaded successfuly!")
         train_dataset = test_dataset
 
-        #analysis tools
+        # Analysis tools
         '''analyse_dataset(test_dataset)
         train_dataset.estimate_by_formula()'''
 
@@ -103,25 +105,26 @@ def main(load_checkpoint: bool = False,
         train_dataset = DictDataset(dataset_path + "_train.h5",
                                     h5=True, masking=True)
         print("Training dataset loaded successfuly!")
-        test_dataset = DictDataset(dataset_path + "_test.h5", h5=True, masking=True)
+        test_dataset = DictDataset(dataset_path + "_validation.h5", h5=True, masking=True)
+
         print("Testing dataset loaded successfuly!")
     
     bounds = train_dataset.getBounds()
     denormalizer = Denormalizer(0, 1, bounds[2], 0, 1)
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
-                              shuffle=True,
+                              shuffle=False,
                               num_workers=4,
-                             sampler=DistributedSampler(train_dataset, num_replicas=world_size, rank=rank),
-                             pin_memory=True))
+                              sampler=DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True),
+                              pin_memory=True)
     test_loader = DataLoader(test_dataset,
                              batch_size=batch_size,
                              num_workers=4,
                              sampler=DistributedSampler(test_dataset, num_replicas=world_size, rank=rank),
                              pin_memory=True)
-    
 
-    
+
+
     # Initialize the model
     if experiment == IMAGES:
         dimensions = 2
@@ -137,7 +140,7 @@ def main(load_checkpoint: bool = False,
         else:
             modes = [24, 16, 16]
 
-    
+
     model = FNOArch(
         dimension=dimensions,
         nr_fno_layers=layers,
@@ -173,7 +176,7 @@ def main(load_checkpoint: bool = False,
     epoch = 0
     if load_checkpoint:
         checkpoint = torch.load(folder + "/checkpoint.pth")
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.module.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler"])
         epoch = checkpoint["epoch"]
@@ -193,6 +196,8 @@ def main(load_checkpoint: bool = False,
         trainer.evaluate(verbose=True)
     else:
         trainer.trainRun(epoch)
+
+    dist.destroy_process_group()
 
 
 
@@ -235,12 +240,14 @@ if __name__ == "__main__":
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    evaluation = True
+    evaluation = False
     main(   load_checkpoint=(False or evaluation),
             name=None,
             evaluation=evaluation,
-            experiment=IMAGES,
+            experiment=SPHERES,
             version=0,
             layers=4,
             factorized=False,
+            batch_size=12,
+            epochs=2
             )

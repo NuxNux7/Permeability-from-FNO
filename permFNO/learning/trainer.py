@@ -4,12 +4,20 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from torch.amp import autocast, GradScaler
 
-import time
+import time, sys, os
+from pathlib import Path
 from tabulate import tabulate
+import csv
 
-from permFNO.data.dataWriter import visualize, saveCSV, saveErrorPlot
-from permFNO.data.normalization import Denormalizer
+project_root = str(Path(__file__).parent.parent.absolute())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from data.dataWriter import visualize, saveCSV, saveErrorPlot
+from data.normalization import Denormalizer
 from .loss import *
+from .gpuMonitor import GPUMonitor
+
 
 
 class Trainer():
@@ -73,37 +81,70 @@ class Trainer():
 
         self.writer = SummaryWriter(log_dir=folder)
 
+        if rank == 0:
+            self.monitor = GPUMonitor()
+        else:
+            self.monitor = None
+
 
 
     def trainRun(self, epoch: int = 0):
+
+        if self.monitor is not None:
+            self.monitor.start()
+            epoch_monitor = None
+    
         for epoch in range(epoch, self.epochs):
+            if self.monitor is not None:
+                epoch_monitor = GPUMonitor()
+                epoch_monitor.start()
+
             self.train_loader.sampler.set_epoch(epoch)
             self.test_loader.sampler.set_epoch(epoch)
-
-            epoch_start_time = time.time()
 
             train_loss = self.train()
             val_loss, val_loss_in = self.evaluate(((epoch % 10) == 0))
 
-            epoch_end_time = time.time()
-            epoch_duration = epoch_end_time - epoch_start_time
+
+            if self.monitor is not None:
+                epoch_monitor.stop()
+                gpu_metrics = epoch_monitor.getMetrics()
+                epoch_monitor.logTB(self.writer, "GPU/Epoch", epoch)
+                
+            else:
+                gpu_metrics = None
 
             if self.rank == 0:
-                self.printProgress(epoch,
-                              train_loss, val_loss, val_loss_in,
-                              epoch_duration)
+                self.printProgress(epoch, train_loss, val_loss, val_loss_in, gpu_metrics)
 
             # Save the model checkpoint
             if (((epoch + 1) % 10) == 0) or (epoch == (self.epochs - 1)):
                 self.saveCheckpoint(epoch)
 
+
+        if self.monitor is not None:
+            self.monitor.stop()
+            self.monitor.printSummary()
+            self.monitor.logTB(self.writer, "GPU/Overall")
+            self.monitor.saveCSV(self.folder + "/metrics.csv")
+                
+                    
         self.writer.flush()
 
 
 
     # Evaluate the model on the validation set
     def evaluateRun(self):
+        if self.monitor is not None:
+            self.monitor.start()
+    
         val_loss, val_loss_in = self.evaluate(True)
+
+        if self.monitor is not None:
+            self.monitor.stop()
+            self.monitor.printSummary()
+            self.monitor.saveCSV(self.folder + "/metrics_eval.csv")
+
         print(f"Val Loss General: {val_loss}, "
               f"Val Loss Inlet: {val_loss_in}")
 
@@ -223,17 +264,21 @@ class Trainer():
 
 
     # Print the training progress
-    def printProgress(self, epoch, train_loss, val_loss, val_loss_in, epoch_duration):
+    def printProgress(self, epoch, train_loss, val_loss, val_loss_in, gpu_metrics):
         # Prepare the data
-        headers = ["Epoch", "Train Loss", "Val Loss", "Val Loss In", "LR", "Batch Time"]
+        headers = ["Epoch", "Train Loss", "Val Loss", "Val Loss In", "LR", "Batch Time", "Mem (MB)", "GPU Util", "Energy (Wh)"]
         data = [
             [f"{epoch+1}/{self.epochs}",
              f"{train_loss:.2e}",
              f"{val_loss:.2e}",
              f"{val_loss_in:.2e}",
              f"{self.scheduler.get_last_lr()[0]:.2e}",
-             f"{epoch_duration:.2f}s"]
+             f"{gpu_metrics.get('duration_seconds'):.2f}s",
+             f"{gpu_metrics.get('memory_max_mb', 0):.0f}",
+             f"{gpu_metrics.get('gpu_util_avg_percent', 0):.1f}%",
+             f"{gpu_metrics.get('energy_kwh', 0) * 1000:.1f}"]
         ]
+           
 
         # Print the table
         if epoch == 0:
@@ -255,6 +300,7 @@ class Trainer():
         torch.save({
             'epoch': epoch,
             'model_state_dict': self.model.module.state_dict(),
+            #'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict(),
         }, (self.folder + "/checkpoint.pth"))

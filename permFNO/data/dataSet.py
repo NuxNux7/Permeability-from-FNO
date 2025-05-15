@@ -49,7 +49,7 @@ class DictDataset(Dataset):
             if masking:
                 self.masks = create_mask(self.inputs["fill"])   
         else:
-            (self.inputs, self.lables, self.masks, self.names, self.bounds) = load_dataset(path, None, rotate, scaling, masking)
+            (self.inputs, self.target, self.masks, self.names, self.bounds) = load_dataset(path, None, None, rotate, scaling, masking)
 
         self.size = self.inputs["fill"].shape[0]
 

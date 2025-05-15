@@ -1,6 +1,9 @@
-# Code used for simulating the geometries with the LBM solver lbmpy in 2D
+# Code used for simulating the geometries with the LBM solver lbmpy in 3D
 
 from pystencils import Target
+from pystencils.slicing import (
+    normalize_slice, shift_slice, slice_from_direction, slice_intersection)
+
 from lbmpy.session import *
 from lbmpy.methods import create_trt_with_magic_number
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
@@ -75,7 +78,37 @@ def simulate_medium(geometry, domain_size, sample_name, buffer=32):
 
     wall = NoSlip()
     
-    sc1.boundary_handling.set_boundary_from_mask(wall, mask=mask, ghost_layers=True, inner_ghost_layers=True)
+
+    def geometry_from_array_callback(x, y, z):        
+        # convert position to indices
+        x_idx = np.floor(x + 1).astype(int)
+        y_idx = np.floor(y + 1).astype(int)
+        z_idx = np.floor(z + 1).astype(int)
+        
+        result = np.zeros_like(x, dtype=bool)
+        
+        # Find valid indices
+        valid_indices = (
+            (0 <= x_idx) & (x_idx < mask.shape[0]) &
+            (0 <= y_idx) & (y_idx < mask.shape[1]) &
+            (0 <= z_idx) & (z_idx < mask.shape[2])
+        )
+        
+        # set flag
+        if np.any(valid_indices):
+            valid_x = x_idx[valid_indices]
+            valid_y = y_idx[valid_indices]
+            valid_z = z_idx[valid_indices]
+            
+            result[valid_indices] = mask[valid_x, valid_y, valid_z]
+        
+        # Rest is wall
+        result[~valid_indices] = True
+        
+        return result
+    
+    sc1.boundary_handling.set_boundary(wall, mask_callback=geometry_from_array_callback, ghost_layers=True, inner_ghost_layers=True)
+    
 
     # walls: top, bottom, front, back (x+-, y+-)
     sc1.boundary_handling.set_boundary(wall, make_slice[0, :, :])
@@ -117,9 +150,10 @@ def simulate_medium(geometry, domain_size, sample_name, buffer=32):
     return i
 
 
+
 if __name__ == "__main__":
 
-    path = 'external/ownSimulations/geometries.hp5'
+    path = '/home/vault/unrz/unrz109h/porous_media_data/DRP/simulation_files/geometries.hp5'
 
     domain = 128
     buffer = 32
@@ -130,7 +164,7 @@ if __name__ == "__main__":
 
     failed_sims = []
 
-    for i in [12, 15, 16, 19, 37, 46, 48, 57, 61, 116, 128]:
+    for i in range(20, 128):
         print("start simulation nbr.: ", str(i))
 
         geometry = load_geometry_from_file(path, domain_size, i, flip)

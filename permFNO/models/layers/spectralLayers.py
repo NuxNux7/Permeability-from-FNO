@@ -16,8 +16,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from opt_einsum import contract
-
 
 class SpectralConv1d(nn.Module):
     """1D Fourier layer. It does FFT, linear transform, and Inverse FFT.
@@ -524,7 +522,8 @@ class FactorizedSpectralConv3d(nn.Module):
         calculation = "bixyz," + self.dir[dim] + "->boxyz"
         cweights = torch.view_as_complex(weights)
 
-        result = contract(calculation, input, cweights)
+        #result = contract(calculation, input, cweights)
+        result = torch.einsum(calculation, input, cweights)
         if cast:
             return result.type(torch.complex32)
         else:

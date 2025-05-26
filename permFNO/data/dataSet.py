@@ -8,12 +8,15 @@ import numpy as np
 import h5py
 
 from matplotlib import pyplot as plt
+from scipy import ndimage
 import random
 
 
 from .dataReader import load_dataset, create_mask
 from .dataWriter import saveH5PY, saveErrorPlot
 from .normalization import denormalize_new, normalize_new
+
+SDF = False
 
 
 class DictDataset(Dataset):
@@ -39,6 +42,18 @@ class DictDataset(Dataset):
         if h5:
             self.h5f = h5py.File(path, 'r')
             self.inputs = self.h5f["input"]
+
+            # Calculate the signed distance field
+            if SDF:
+                field = np.array(self.inputs["fill"])
+                outside = ndimage.distance_transform_edt(1 - field).astype(np.float32)
+                inside = ndimage.distance_transform_edt(field).astype(np.float32)
+                sdf = outside - inside
+                print(sdf.max(), sdf.min())
+                sdf = sdf / 20.952328
+                print(sdf.max(), sdf.min())
+                self.inputs = {"fill": sdf}
+
             self.target = self.h5f["output"]
             self.names = self.h5f["name"]
             if "bounds" in self.h5f:
@@ -67,6 +82,7 @@ class DictDataset(Dataset):
             tuple: (input_data, label_data, mask_data, name)
         """
         return (self.inputs["fill"][idx], self.target["p"][idx], self.masks["p"][idx], self.names[idx])
+
     
     def getBounds(self):
         """

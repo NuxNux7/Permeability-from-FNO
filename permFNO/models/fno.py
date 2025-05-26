@@ -246,6 +246,7 @@ class FactorizedFNO2DEncoder(nn.Module):
         padding: Union[int, List[int]] = 8,
         padding_type: str = "constant",
         activation_fn = nn.GELU(),
+        original_conv: bool = False,
         coord_features: bool = True,
         weight_sharing: bool = False,
         use_weight_norm: bool = False,
@@ -260,6 +261,7 @@ class FactorizedFNO2DEncoder(nn.Module):
         self.fno_width = fno_layer_size
 
         # Features
+        self.original_conv = original_conv
         self.coord_features = coord_features
         self.weight_sharing = weight_sharing
         self.use_weight_norm = use_weight_norm
@@ -299,15 +301,25 @@ class FactorizedFNO2DEncoder(nn.Module):
 
         # Build Factorized Neural Fourier Operators
         for k in range(self.nr_fno_layers):
-            self.spconv_layers.append(
-                FactorizedSpectralConv2d(
-                    self.fno_width,
-                    self.fno_width,
-                    fno_modes[0],
-                    fno_modes[1],
-                    self.weights,
+            if self.original_conv:
+                self.spconv_layers.append(
+                    SpectralConv2d(
+                        self.fno_width,
+                        self.fno_width,
+                        fno_modes[0],
+                        fno_modes[1],
+                    )
                 )
-            )
+            else:
+                self.spconv_layers.append(
+                    FactorizedSpectralConv2d(
+                            self.fno_width,
+                            self.fno_width,
+                            fno_modes[0],
+                            fno_modes[1],
+                            self.weights,
+                        )
+                )
             use_dropout = self.dropout
             use_activation_fn = self.activation_fn
 
@@ -381,6 +393,7 @@ class FactorizedFNO3DEncoder(nn.Module):
         padding: Union[int, List[int]] = 8,
         padding_type: str = "constant",
         activation_fn = nn.GELU(),
+        original_conv: bool = False,
         coord_features: bool = True,
         weight_sharing: bool = False,
         use_weight_norm: bool = False,
@@ -395,6 +408,7 @@ class FactorizedFNO3DEncoder(nn.Module):
         self.fno_width = fno_layer_size
 
         # Features
+        self.original_conv = original_conv
         self.coord_features = coord_features
         self.weight_sharing = weight_sharing
         self.use_weight_norm = use_weight_norm
@@ -434,16 +448,27 @@ class FactorizedFNO3DEncoder(nn.Module):
 
         # Build Factorized Neural Fourier Operators
         for k in range(self.nr_fno_layers):
-            self.spconv_layers.append(
-                FactorizedSpectralConv3d(
-                    self.fno_width,
-                    self.fno_width,
-                    fno_modes[0],
-                    fno_modes[1],
-                    fno_modes[2],
-                    self.weights,
+            if self.original_conv:
+                self.spconv_layers.append(
+                    SpectralConv3d(
+                        self.fno_width,
+                        self.fno_width,
+                        fno_modes[0],
+                        fno_modes[1],
+                        fno_modes[2],
+                    )
                 )
-            )
+            else:
+                self.spconv_layers.append(
+                    FactorizedSpectralConv3d(
+                            self.fno_width,
+                            self.fno_width,
+                            fno_modes[0],
+                            fno_modes[1],
+                            fno_modes[2],
+                            self.weights,
+                        )
+                )
 
             use_dropout = self.dropout
             use_activation_fn = self.activation_fn
@@ -629,6 +654,7 @@ class FNOArch(nn.Module):
         decoder_net: nn.Module = SirenArch(32, 1, 32, 2),
         coord_features: bool = True,
         factorized: bool = False,
+        original_conv: bool = False,
         weight_norm: bool = False,
         weight_sharing: bool = False,
         batch_norm: bool = False,
@@ -651,6 +677,7 @@ class FNOArch(nn.Module):
 
         # F-FNO
         self.factorized = factorized
+        self.original_conv = original_conv
         self.weight_sharing = weight_sharing
         self.batch_norm = batch_norm
         self.dropout = dropout
@@ -714,6 +741,7 @@ class FNOArch(nn.Module):
                 padding=self.padding,
                 padding_type=self.padding_type,
                 activation_fn=self.activation_fn,
+                original_conv=self.original_conv,
                 coord_features=self.coord_features,
                 use_weight_norm=self.weight_norm
             )

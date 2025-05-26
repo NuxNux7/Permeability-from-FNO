@@ -8,6 +8,8 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 import os
+import argparse
+from torchsummary import summary
 
 from learning.scheduler import CosineWithWarmupScheduler
 from learning.loss import *
@@ -17,6 +19,8 @@ from data.dataWriter import saveArraysToVTK
 from data.normalization import Denormalizer
 
 from models.fno import FNOArch
+from models.unet import UNet3D, UNet3DShubh
+from models.CNN import CNN3D
 from models.siren import SirenArch
 from models.feedForward import FeedForwardBlock
 
@@ -43,6 +47,7 @@ def main(load_checkpoint: bool = False,
          version: int = 0,
          layers: int = 4,
          factorized: bool = False,
+         original_conv: bool = False,
          epochs: int = 50,
          batch_size: int = 8,
          learning_rate: int = 2.5e-3,
@@ -91,7 +96,7 @@ def main(load_checkpoint: bool = False,
 
 
     # Create data loaders
-    dataset_path = "/home/vault/unrz/unrz109h/porous_media_data/" + DATSET_NAMES[experiment] + "/h5_datasets/" + DATASET_VERSIONS[experiment][version]
+    dataset_path = "/hnvme/workspace/unrz109h-porous_media_data/" + DATSET_NAMES[experiment] + "/h5_datasets/" + DATASET_VERSIONS[experiment][version]
     if evaluation:
         test_dataset = DictDataset(dataset_path + "_validation.h5", h5=True, masking=True)
         print("Validation dataset loaded successfuly!")
@@ -105,8 +110,8 @@ def main(load_checkpoint: bool = False,
         train_dataset = DictDataset(dataset_path + "_train.h5",
                                     h5=True, masking=True)
         print("Training dataset loaded successfuly!")
-        test_dataset = DictDataset(dataset_path + "_validation.h5", h5=True, masking=True)
-
+        test_dataset = DictDataset(dataset_path + "_validation.h5",
+                                   h5=True, masking=True)
         print("Testing dataset loaded successfuly!")
     
     bounds = train_dataset.getBounds()
@@ -116,12 +121,14 @@ def main(load_checkpoint: bool = False,
                               shuffle=False,
                               num_workers=4,
                               sampler=DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True),
-                              pin_memory=True)
+                              pin_memory=True,
+                              persistent_workers=True,)
     test_loader = DataLoader(test_dataset,
                              batch_size=batch_size,
                              num_workers=4,
                              sampler=DistributedSampler(test_dataset, num_replicas=world_size, rank=rank),
-                             pin_memory=True)
+                             pin_memory=True,
+                             persistent_workers=True,)
 
 
 
@@ -150,21 +157,32 @@ def main(load_checkpoint: bool = False,
         decoder_net=decoderNet,
         coord_features=True,
         factorized=factorized,
+        original_conv=original_conv,
         weight_sharing=False,
         weight_norm=True,
         batch_norm=False,
         dropout=False,
     ).to(device)
+    ''' model = UNet3D(
+            coord_features=False,
+        ).to(device)'''
+    ''' model = CNN3D(
+            coord_features=False,
+        ).to(device)
+        
+        criterion = HuberLoss()'''
+
     model = DDP(model, device_ids=[rank])
 
 
     # Print model parameters
-    '''print("Tunable Parameter: ", sum(p.numel() for p in model.parameters()))
-    print(model)
-    summary(model, (1, 128, 64, 64))'''
+    #print("Tunable Parameter: ", sum(p.numel() for p in model.parameters()))
+    #print(model)
+    #summary(model, (1, 128, 64, 64))
 
     # Initialize the criterion
     criterion = MaskedMSELoss()
+    #criterion = HuberLoss()
 
     # Initialize the optimizer with Cosine LR
     gradient_accumulation = 1
@@ -190,12 +208,16 @@ def main(load_checkpoint: bool = False,
                       epochs, folder,
                       device, rank,
                       False, gradient_accumulation,
-                      denormalizer)
+                      denormalizer,
+                      scalar_output=False)
     
     if evaluation:
-        trainer.evaluate(verbose=True)
+        trainer.evaluateRun()
     else:
         trainer.trainRun(epoch)
+        trainer.evaluate(verbose=True)
+        #trainer.evaluateSchalar(verbose=True)
+
 
     dist.destroy_process_group()
 
@@ -205,14 +227,18 @@ def name_from_settings( experiment: int = 0,
                         version: int = 0,
                         layers: int = 4,
                         factorized: bool = False,
-                        number: int = None):
+                        original_conv: bool = False,
+                        number: int = -1):
     
     name = DATSET_NAMES[experiment] + "/" + str(layers) + "l_"
     if factorized:
-        name += "factorized_"
+        if original_conv:
+            name += "ff_"
+        else:
+            name += "factorized_"
     name += DATASET_VERSIONS[experiment][version]
-    if number is not None:
-        name += "_" + number
+    if number != -1:
+        name += "_" + str(number)
 
     return name
 
@@ -235,6 +261,23 @@ def setup_ddp():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Permeability FNO')
+    parser.add_argument('--experiment', type=int, default=SPHERES, help='Experiment name: 0: Spheres, 1: DRP, 2:Images')
+    parser.add_argument('--layers', type=int, default=4, help='Number of layers')
+    parser.add_argument('--version', type=int, default=0, help='Select the dataset version: 0: std, ...')
+    parser.add_argument('--factorized', action='store_true', help='Use factorized architecture')
+    parser.add_argument('--original_conv', action='store_true', help='Use factorized architecture but with the original spectral convolutions')
+    args, _ = parser.parse_known_args()
+
+    factorized = False
+    if args.original_conv:
+        factorized = True
+    if args.factorized:
+        factorized = True
+
+    batch_size = 12
+    if args.experiment == IMAGES:
+       batch_size = 32
 
     # Performance
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -244,10 +287,11 @@ if __name__ == "__main__":
     main(   load_checkpoint=(False or evaluation),
             name=None,
             evaluation=evaluation,
-            experiment=SPHERES,
-            version=0,
-            layers=4,
-            factorized=False,
-            batch_size=12,
-            epochs=2
+            experiment=args.experiment,
+            version=args.version,
+            layers=args.layers,
+            factorized=factorized,
+            original_conv=args.original_conv,
+            batch_size=batch_size,
+            epochs=50
             )

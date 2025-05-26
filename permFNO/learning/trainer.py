@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from torch.amp import autocast, GradScaler
+import torch.profiler
 
 import time, sys, os
 from pathlib import Path
@@ -55,7 +56,9 @@ class Trainer():
                  folder, device, rank,
                  amp: bool = False, 
                  gradient_accumulation: int = 1,
-                 denorm=Denormalizer()):
+                 denorm=Denormalizer(),
+                 scalar_output=False,
+                ):
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -67,6 +70,7 @@ class Trainer():
         self.device = device
         self.rank = rank
         self.denorm = denorm
+        self.scalar_output = scalar_output
 
         self.amp = amp
         self.gradient_accumulation = gradient_accumulation
@@ -80,6 +84,7 @@ class Trainer():
         )
 
         self.writer = SummaryWriter(log_dir=folder)
+        self.sampelsPerSecond = 0
 
         if rank == 0:
             self.monitor = GPUMonitor()
@@ -90,11 +95,13 @@ class Trainer():
 
     def trainRun(self, epoch: int = 0):
 
+        sampels_second_avg = 0
         if self.monitor is not None:
             self.monitor.start()
             epoch_monitor = None
     
         for epoch in range(epoch, self.epochs):
+
             if self.monitor is not None:
                 epoch_monitor = GPUMonitor()
                 epoch_monitor.start()
@@ -102,15 +109,20 @@ class Trainer():
             self.train_loader.sampler.set_epoch(epoch)
             self.test_loader.sampler.set_epoch(epoch)
 
-            train_loss = self.train()
-            val_loss, val_loss_in = self.evaluate(((epoch % 10) == 0))
+            if not self.scalar_output:
+                train_loss = self.train()
+                val_loss, val_loss_in = self.evaluate(verbose=False)
+            else:
+                train_loss = self.trainScalar()
+                val_loss, val_loss_in = self.evaluateScalar(verbose=False)
 
 
             if self.monitor is not None:
                 epoch_monitor.stop()
                 gpu_metrics = epoch_monitor.getMetrics()
                 epoch_monitor.logTB(self.writer, "GPU/Epoch", epoch)
-                
+                if epoch >= 1:
+                    sampels_second_avg += (len(self.train_loader.dataset) + len(self.test_loader.dataset)) / gpu_metrics.get('duration_seconds')
             else:
                 gpu_metrics = None
 
@@ -127,6 +139,10 @@ class Trainer():
             self.monitor.printSummary()
             self.monitor.logTB(self.writer, "GPU/Overall")
             self.monitor.saveCSV(self.folder + "/metrics.csv")
+
+            sampels_second_avg = sampels_second_avg / (self.epochs - 1)
+            self.sampelsPerSecond = sampels_second_avg
+            print("sampels/second average:", sampels_second_avg)
                 
                     
         self.writer.flush()
@@ -138,15 +154,20 @@ class Trainer():
         if self.monitor is not None:
             self.monitor.start()
     
-        val_loss, val_loss_in = self.evaluate(True)
+        if not self.scalar_output:
+            val_loss, val_loss_in = self.evaluate(True)
+        else:
+            val_loss, val_loss_in = self.evaluateScalar(True)
 
         if self.monitor is not None:
             self.monitor.stop()
             self.monitor.printSummary()
             self.monitor.saveCSV(self.folder + "/metrics_eval.csv")
 
-        print(f"Val Loss General: {val_loss}, "
-              f"Val Loss Inlet: {val_loss_in}")
+        if self.rank == 0:
+            print(f"Val Loss General: {val_loss}, "
+                  f"Val Loss Inlet: {val_loss_in}, "
+                  f"Time: {self.monitor.getMetrics().get('duration_seconds')} s")
 
 
 
@@ -156,33 +177,87 @@ class Trainer():
 
         total_loss = 0
         self.optimizer.zero_grad()
+        # with torch.profiler.profile(
+        #     activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        #     record_shapes=True,
+        #     profile_memory=True,
+        #     with_stack=True
+        # ) as prof:
         for batch_idx, (inputs, targets, mask, _) in enumerate(self.train_loader):
 
             # load inputs
-            inputs, targets, mask = inputs.to(self.device), targets.to(self.device), mask.to(self.device)
+            inputs = inputs.to(self.device, non_blocking=True)
+            targets = targets.to(self.device, non_blocking=True)
+            mask = mask.to(self.device, non_blocking=True)
 
             with autocast("cuda", enabled=self.amp):
                 outputs = self.model(inputs)
-
                 # loss of preassure filed with set criterion              
                 loss = self.criterion(outputs, targets, mask)
                 loss = loss / self.gradient_accumulation
-
             self.scaler.scale(loss).backward()
 
             # Change weights
             if ((batch_idx + 1) % self.gradient_accumulation == 0) or (batch_idx + 1 == len(self.train_loader)):
                 self.scaler.unscale_(self.optimizer)
                 torch.nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
+
                 self.scaler.step(self.optimizer)
                 self.optimizer.zero_grad()
-
                 # update progression
+
                 self.scaler.update()
-
                 self.scheduler.step()
-
             total_loss += loss
+
+        #print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=20))
+        #print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=20))
+
+
+        return total_loss / len(self.train_loader)
+    
+    def trainScalar(self):
+        self.model.train()
+
+        total_loss = 0
+        self.optimizer.zero_grad()
+        # with torch.profiler.profile(
+        #     activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        #     record_shapes=True,
+        #     profile_memory=True,
+        #     with_stack=True
+        # ) as prof:
+        for batch_idx, (inputs, targets, mask, _) in enumerate(self.train_loader):
+
+            # load inputs
+            inputs = inputs.to(self.device, non_blocking=True)
+            targets = targets[:, 0, 0:12].mean(dim=(-3, -2, -1))
+            targets = targets.to(self.device, non_blocking=True)
+            #mask = mask.to(self.device, non_blocking=True)
+
+            with autocast("cuda", enabled=self.amp):
+                outputs = self.model(inputs)
+                # loss of preassure filed with set criterion              
+                loss = self.criterion(outputs, targets)
+                loss = loss / self.gradient_accumulation
+            self.scaler.scale(loss).backward()
+
+            # Change weights
+            if ((batch_idx + 1) % self.gradient_accumulation == 0) or (batch_idx + 1 == len(self.train_loader)):
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
+
+                self.scaler.step(self.optimizer)
+                self.optimizer.zero_grad()
+                # update progression
+
+                self.scaler.update()
+                self.scheduler.step()
+            total_loss += loss
+
+        #print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=20))
+        #print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=20))
+
 
         return total_loss / len(self.train_loader)
     
@@ -246,6 +321,70 @@ class Trainer():
                 saveCSV(individual_error, (self.folder + "/errors.csv"))
                 saveErrorPlot(outputs_mean, targets_mean, (self.folder + "/errors.png"))
 
+                mape = MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean)).item()
+                mae = MAELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean)).item()
+                r2 = R2Score()(torch.tensor(outputs_mean), torch.tensor(targets_mean)).item()
+                max_mae = -1.
+                for _, v in individual_error_mean.items():
+                    error = float(v)
+                    if error > max_mae:
+                        max_mae = error
+
+                print("MAE:", mae, "MAPE:", mape, "R2:", r2, "Max MAE:", max_mae)
+
+                # Save metrics to a CSV file
+                pathsComp = self.folder.split(os.sep)
+                mse = total_loss / len(self.test_loader.dataset)
+                with open("perf_run.csv", "a", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow([pathsComp[-2], pathsComp[-1], mse, mae, mape, r2, max_mae, self.sampelsPerSecond, sum(p.numel() for p in self.model.parameters())])
+            
+
+
+        return total_loss / len(self.test_loader.dataset), MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
+    
+
+    # Evaluation function
+    def evaluateScalar(self, verbose: bool = True):
+        self.model.eval()
+
+        if verbose:
+            individual_criterium_mean = IndividualLoss(MAELoss())
+            individual_error_mean = {}
+
+        total_loss = 0
+
+        with torch.no_grad():
+            outputs_mean = []
+            targets_mean = []
+            for batch, (inputs, targets, masks, names) in enumerate(self.test_loader):
+                targets = targets[:, 0, 0:12].mean(dim=(-3, -2, -1))
+                inputs, targets  = inputs.to(self.device), targets.to(self.device)
+
+                with autocast("cuda", enabled=self.amp):
+                    outputs = self.model(inputs)
+
+                    # reverse power normalization
+                    outputs = self.denorm(outputs)
+                    targets = self.denorm(targets)
+
+                    total_loss += self.criterion(outputs, targets).item() * outputs.shape[0]
+                    
+                    outputs_list = outputs.tolist()
+                    outputs_list = [item for sublist in outputs_list for item in sublist]
+                    outputs_mean.extend(outputs_list)
+                    targets_mean.extend(targets.tolist())
+
+                    if verbose:
+                        result = individual_criterium_mean(outputs, targets, names)
+                        individual_error_mean.update(result)
+                    if batch == 0:
+                        self.writer.add_graph(self.model, torch.unsqueeze(inputs[0], 0))
+
+            # print result
+            if verbose and (self.rank == 0):
+                saveErrorPlot(outputs_mean, targets_mean, (self.folder + "/errors.png"))
+
                 mape = MAPELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 mae = MAELoss()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
                 r2 = R2Score()(torch.tensor(outputs_mean), torch.tensor(targets_mean))
@@ -256,6 +395,10 @@ class Trainer():
                         max_mae = error
 
                 print("MAE:", mae, "MAPE:", mape, "R2:", r2, "Max MAE:", max_mae)
+                # Save metrics to a CSV file
+                with open("perf_run.csv", "a", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow([os.path.basename(self.folder), mae, mape, r2, max_mae])
             
 
 
@@ -266,14 +409,15 @@ class Trainer():
     # Print the training progress
     def printProgress(self, epoch, train_loss, val_loss, val_loss_in, gpu_metrics):
         # Prepare the data
-        headers = ["Epoch", "Train Loss", "Val Loss", "Val Loss In", "LR", "Batch Time", "Mem (MB)", "GPU Util", "Energy (Wh)"]
+        headers = ["Epoch", "Train Loss", "Val Loss", "Val Loss In", "LR", "samp/s", "Mem (MB)", "GPU Util", "Energy (Wh)"]
+        sampels_per_second = (len(self.train_loader.dataset) + len(self.test_loader.dataset)) / gpu_metrics.get('duration_seconds')
         data = [
             [f"{epoch+1}/{self.epochs}",
              f"{train_loss:.2e}",
              f"{val_loss:.2e}",
              f"{val_loss_in:.2e}",
              f"{self.scheduler.get_last_lr()[0]:.2e}",
-             f"{gpu_metrics.get('duration_seconds'):.2f}s",
+             f"{sampels_per_second:.2f}",
              f"{gpu_metrics.get('memory_max_mb', 0):.0f}",
              f"{gpu_metrics.get('gpu_util_avg_percent', 0):.1f}%",
              f"{gpu_metrics.get('energy_kwh', 0) * 1000:.1f}"]
